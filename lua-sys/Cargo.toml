@@ -1,0 +1,17 @@
+[package]
+name = "lua-sys"
+version = "0.1.0"
+authors = ["Yanis Guaye <yguaye44@gmail.com>"]
+edition = "2018"
+build = "build.rs"
+
+[dependencies]
+libc = "^0.2.65"
+
+[build-dependencies]
+vcpkg = "^0.2.7"
+bindgen = { version = "^0.51.1", optional = true }
+
+[features]
+default = []
+use-bindgen = ["bindgen"]
