@@ -26,7 +26,6 @@ fn main() {
     use_embedded_lua();
     #[cfg(feature = "system-lua")]
     use_system_lua();
-    copy_pregenerated_mappings();
 }
 
 #[cfg(feature = "embedded-lua")]
@@ -131,20 +130,4 @@ fn find_pkg_config() {
         .atleast_version("5.3")
         .probe("lua")
         .expect("pkg-config did not find the lua package");
-}
-
-/// Copies the lua bindings file in the crate root
-/// to the output directory.
-fn copy_pregenerated_mappings() {
-    use std::env;
-    use std::fs;
-    use std::path::PathBuf;
-
-    let crate_path = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
-    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
-    fs::copy(
-        crate_path.join("lua_bindings.rs"),
-        out_path.join("lua_bindings.rs"),
-    )
-    .expect("Couldn't find pregenerated bindings!");
 }
