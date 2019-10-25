@@ -199,3 +199,6 @@
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
+
+This product bundles Lua 5.3.5, which is available under a
+"MIT" license.  For details, https://www.lua.org/license.html.
