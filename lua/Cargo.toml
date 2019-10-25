@@ -1,8 +1,0 @@
-[package]
-name = "lua"
-version = "0.1.0"
-authors = ["Yanis Guaye <yguaye44@gmail.com>"]
-edition = "2018"
-
-[dependencies]
-lua-sys = {path = "../lua-sys"}

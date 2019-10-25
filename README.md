@@ -1,17 +1,18 @@
 # Pollua
 
-(WIP readme)
+(WIP) rust bindings to Lua 5.3
 
 ## Building
 
-see [bindgen requirements](https://github.com/rust-lang/rust-bindgen/blob/master/book/src/requirements.md)
+### Using embedded Lua
+On Windows and Linux:
+```
+cargo build
+```
+### Using system Lua
 
-### Windows:
-
-Requirements:
-- vcpkg
-- Clang v3.9:
-    Download and install the official pre-built binary from [the LLVM download page](http://releases.llvm.org/download.html)
+on Windows:
+requires vcpkg
 
 ```
 vcpkg install --triplet x64-windows lua
