@@ -14,68 +14,134 @@
  * limitations under the License.
  */
 
-#[cfg(target_env = "msvc")]
+#[cfg(feature = "embedded-lua")]
+extern crate cc;
+#[cfg(all(not(target_env = "msvc"), feature = "system-lua"))]
+extern crate pkg_config;
+#[cfg(all(target_env = "msvc", feature = "system-lua"))]
 extern crate vcpkg;
 
-use std::env;
-use std::fs;
-use std::path::PathBuf;
-
 fn main() {
-    find_lua();
+    #[cfg(feature = "embedded-lua")]
+    use_embedded_lua();
+    #[cfg(feature = "system-lua")]
+    use_system_lua();
     copy_pregenerated_mappings();
 }
 
-fn find_lua() {
-    let host = env::var("HOST").expect("Cargo build scripts always have HOST");
+#[cfg(feature = "embedded-lua")]
+macro_rules! add_lua_sources {
+    ($cfg:ident, $root:expr, [$($file:expr),*]) => {
+        $($cfg.file(::std::path::Path::new($root).join($file)));*
+    };
+}
 
-    if find_vcpkg() {
-        return;
+#[cfg(feature = "embedded-lua")]
+fn use_embedded_lua() {
+    use std::env;
+
+    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or("".to_string());
+    let target_family = env::var("CARGO_CFG_TARGET_FAMILY").unwrap_or("".to_string());
+
+    let mut cc_config = cc::Build::new();
+
+    if let Some(define) = match (target_os.as_str(), target_family.as_str()) {
+        ("linux", _) => Some("LUA_USE_LINUX"),
+        ("macos", _) => Some("LUA_USE_MACOSX"),
+        (_, "unix") => Some("LUA_USE_POSIX"),
+        (_, "windows") => Some("LUA_USE_WINDOWS"),
+        (_, _) => None,
+    } {
+        cc_config.define(define, None);
+    };
+
+    if cfg!(debug_assertions) {
+        cc_config.define("LUA_USE_API_CHECK", None);
     }
 
-    if host.contains("windows-msvc") {
-        panic!(format!(
-            "
-It looks like you are compiling for MSVC
-but we could not find the Lua installation.
-"
-        ))
-    } else if host.contains("windows-gnu") {
-        panic!(format!(
-            "
-It looks like you are compiling for MinGW
-but this platform is not supported (yet).
+    cc_config.include("src/embedded");
+    add_lua_sources!(
+        cc_config,
+        "src/embedded",
+        [
+            "lapi.c",
+            "lauxlib.c",
+            "lbaselib.c",
+            "lbitlib.c",
+            "lcode.c",
+            "lcorolib.c",
+            "lctype.c",
+            "ldblib.c",
+            "ldebug.c",
+            "ldo.c",
+            "ldump.c",
+            "lfunc.c",
+            "lgc.c",
+            "linit.c",
+            "liolib.c",
+            "llex.c",
+            "lmathlib.c",
+            "lmem.c",
+            "loadlib.c",
+            "lobject.c",
+            "lopcodes.c",
+            "loslib.c",
+            "lparser.c",
+            "lstate.c",
+            "lstring.c",
+            "lstrlib.c",
+            "ltable.c",
+            "ltablib.c",
+            "ltm.c",
+            "lundump.c",
+            "lutf8lib.c",
+            "lvm.c",
+            "lzio.c"
+        ]
+    );
 
-Please use MSVC instead.    
-"
-        ))
-    } else {
-        panic!(format!("{} is not supported (yet).", host))
-    }
+    cc_config.compile("liblua5.3.a");
+}
+
+#[cfg(feature = "system-lua")]
+fn use_system_lua() {
+    #[cfg(target_env = "msvc")]
+    find_vcpkg();
+    #[cfg(not(target_env = "msvc"))]
+    find_pkg_config();
 }
 
 /// Attempts to find the Lua package with vcpkg.
 ///
-/// returns `Ok(true)` if the package was found or `Err` otherwise.
-#[cfg(target_env = "msvc")]
-fn find_vcpkg() -> bool {
-    match vcpkg::Config::new().emit_includes(true).probe("lua") {
-        Ok(_) => true,
-        Err(e) => panic!(format!(
-            "error: vcpkg did not find the lua package: \n{}",
-            e
-        )),
-    }
+/// panics if the package was not found.
+#[cfg(all(target_env = "msvc", feature = "system-lua"))]
+fn find_vcpkg() {
+    vcpkg::Config::new()
+        .emit_includes(true)
+        .probe("lua")
+        .expect("vcpkg did not find the lua package");
 }
 
-#[cfg(not(target_env = "msvc"))]
-fn find_vcpkg() -> bool {
-    false
+/// Attempts to find the Lua package using pkg-config.
+///
+/// panics if the package was not found.
+#[cfg(all(not(target_env = "msvc"), feature = "system-lua"))]
+fn find_pkg_config() {
+    pkg_config::Config::new()
+        .atleast_version("5.3")
+        .probe("lua")
+        .expect("pkg-config did not find the lua package");
 }
 
+/// Copies the lua bindings file in the crate root
+/// to the output directory.
 fn copy_pregenerated_mappings() {
-    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+    use std::env;
+    use std::fs;
+    use std::path::PathBuf;
+
     let crate_path = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
     fs::copy(
         crate_path.join("lua_bindings.rs"),
         out_path.join("lua_bindings.rs"),
