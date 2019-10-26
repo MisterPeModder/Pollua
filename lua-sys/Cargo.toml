@@ -8,6 +8,7 @@ edition = "2018"
 build = "build.rs"
 keywords = ["lua"]
 categories = ["external-ffi-bindings", "development-tools::ffi"]
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 libc = "^0.2.65"

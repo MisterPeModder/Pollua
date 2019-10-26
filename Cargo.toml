@@ -5,7 +5,7 @@ repository = "https://github.com/MisterPeModder/Pollua"
 version = "0.1.0"
 authors = ["Yanis Guaye <yguaye44@gmail.com>"]
 edition = "2018"
-license = "apache 2.0"
+license = "MIT OR Apache-2.0"
 keywords = ["lua"]
 categories = ["api-bindings", "development-tools::ffi"]
 
