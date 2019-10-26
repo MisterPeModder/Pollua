@@ -2,22 +2,32 @@
 extern crate cc;
 #[cfg(all(not(target_env = "msvc"), feature = "system-lua"))]
 extern crate pkg_config;
+extern crate rustc_version;
 #[cfg(all(target_env = "msvc", feature = "system-lua"))]
 extern crate vcpkg;
 
 fn main() {
+    check_features();
+    check_rustc_version();
+    println!("cargo:rerun-if-changed=src");
+    #[cfg(feature = "embedded-lua")]
+    use_embedded_lua();
+    #[cfg(feature = "system-lua")]
+    use_system_lua();
+}
+
+fn check_features() {
     if cfg!(not(any(feature = "embedded-lua", feature = "system-lua"))) {
         panic!("missing feature 'embedded-lua' or 'system-lua'");
     } else if cfg!(all(feature = "embedded-lua", feature = "system-lua")) {
         panic!("conflicting features: 'embedded-lua' and 'system-lua'");
     }
+}
 
-    println!("cargo:rerun-if-changed=src");
-
-    #[cfg(feature = "embedded-lua")]
-    use_embedded_lua();
-    #[cfg(feature = "system-lua")]
-    use_system_lua();
+fn check_rustc_version() {
+    if let rustc_version::Channel::Nightly = rustc_version::version_meta().unwrap().channel {
+        println!("cargo:rustc-cfg=rust_nightly");
+    }
 }
 
 #[cfg(feature = "embedded-lua")]

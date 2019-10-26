@@ -341,7 +341,7 @@ pub unsafe fn lua_newtable(L: *mut lua_State) {
 
 #[inline]
 pub unsafe fn lua_numbertointeger(n: lua_Number, p: *mut lua_Integer) -> libc::c_int {
-    if n >= LUA_MININTEGER as lua_Number && n < -(LUA_MININTEGER as lua_Number) {
+    if n >= lua_Number::from(LUA_MININTEGER) && n < -lua_Number::from(LUA_MININTEGER) {
         *p = n as lua_Integer;
         1
     } else {
