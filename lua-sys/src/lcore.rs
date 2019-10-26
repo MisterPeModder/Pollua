@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-use core::mem;
 use core::ptr;
 
 //////////////////////////////////////////////////
@@ -97,7 +96,7 @@ pub const LUAI_MAXSTACK: libc::c_int = 1_000_000;
 
 pub const LUA_EXTRASPACE: usize = ::core::mem::size_of::<*const libc::c_void>();
 
-pub const LUA_IDSIZE: libc::c_int = 60;
+pub const LUA_IDSIZE: usize = 60;
 
 pub const LUA_MAXINTEGER: libc::c_int = libc::INT_MAX;
 pub const LUA_MININTEGER: libc::c_int = libc::INT_MIN;
@@ -106,42 +105,48 @@ pub const LUA_MININTEGER: libc::c_int = libc::INT_MIN;
 // Lua types                                    //
 //////////////////////////////////////////////////
 
-pub type lua_Alloc = unsafe extern "C" fn(
-    ud: *mut libc::c_void,
-    ptr: *mut libc::c_void,
-    osize: usize,
-    nsize: usize,
-) -> *mut libc::c_void;
+pub type lua_Alloc = Option<
+    unsafe extern "C" fn(
+        ud: *mut libc::c_void,
+        ptr: *mut libc::c_void,
+        osize: usize,
+        nsize: usize,
+    ) -> *mut libc::c_void,
+>;
 
-pub type lua_CFunction = unsafe extern "C" fn(L: *mut lua_State) -> libc::c_int;
+pub type lua_CFunction = Option<unsafe extern "C" fn(L: *mut lua_State) -> libc::c_int>;
 
 pub type lua_Integer = libc::c_longlong;
 
 pub type lua_KContext = isize;
 
-pub type lua_KFunction =
-    unsafe extern "C" fn(L: *mut lua_State, status: libc::c_int, ctx: lua_KContext) -> libc::c_int;
+pub type lua_KFunction = Option<
+    unsafe extern "C" fn(L: *mut lua_State, status: libc::c_int, ctx: lua_KContext) -> libc::c_int,
+>;
 
 pub type lua_Number = f64;
 
-pub type lua_Reader = unsafe extern "C" fn(
-    L: *mut lua_State,
-    ud: *mut libc::c_void,
-    sz: *mut usize,
-) -> *const libc::c_char;
+pub type lua_Reader = Option<
+    unsafe extern "C" fn(
+        L: *mut lua_State,
+        ud: *mut libc::c_void,
+        sz: *mut usize,
+    ) -> *const libc::c_char,
+>;
 
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
 pub struct lua_State {
     _private: [u8; 0],
 }
 
-pub type lua_Writer = unsafe extern "C" fn(
-    L: *mut lua_State,
-    p: *const libc::c_void,
-    sz: usize,
-    ud: *mut libc::c_void,
-) -> libc::c_int;
+pub type lua_Writer = Option<
+    unsafe extern "C" fn(
+        L: *mut lua_State,
+        p: *const libc::c_void,
+        sz: usize,
+        ud: *mut libc::c_void,
+    ) -> libc::c_int,
+>;
 
 //////////////////////////////////////////////////
 // Lua Functions                                //
@@ -292,13 +297,7 @@ extern "C" {
 
 #[inline]
 pub unsafe fn lua_call(L: *mut lua_State, nargs: libc::c_int, nresults: libc::c_int) {
-    lua_callk(
-        L,
-        nargs,
-        nresults,
-        0,
-        mem::transmute::<Option<lua_KFunction>, lua_KFunction>(None),
-    );
+    lua_callk(L, nargs, nresults, 0, None);
 }
 
 #[inline]
@@ -373,14 +372,7 @@ pub unsafe fn lua_pcall(
     nresults: libc::c_int,
     msgh: libc::c_int,
 ) -> libc::c_int {
-    lua_pcallk(
-        L,
-        nargs,
-        nresults,
-        msgh,
-        0,
-        mem::transmute::<Option<lua_KFunction>, lua_KFunction>(None),
-    )
+    lua_pcallk(L, nargs, nresults, msgh, 0, None)
 }
 
 #[inline]
@@ -443,10 +435,5 @@ pub unsafe fn lua_upvalueindex(i: libc::c_int) -> libc::c_int {
 
 #[inline]
 pub unsafe fn lua_yield(L: *mut lua_State, nresults: libc::c_int) -> libc::c_int {
-    lua_yieldk(
-        L,
-        nresults,
-        0,
-        mem::transmute::<Option<lua_KFunction>, lua_KFunction>(None),
-    )
+    lua_yieldk(L, nresults, 0, None)
 }

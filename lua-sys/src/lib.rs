@@ -24,6 +24,8 @@ extern crate libc;
 #[cfg(feature = "va-list")]
 extern crate va_list;
 
-mod lua;
+mod lcore;
+mod ldebug;
 
-pub use lua::*;
+pub use lcore::*;
+pub use ldebug::*;
