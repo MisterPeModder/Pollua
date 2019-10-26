@@ -22,6 +22,8 @@ extern crate pkg_config;
 extern crate vcpkg;
 
 fn main() {
+    println!("cargo:rerun-if-changed=src");
+
     #[cfg(feature = "embedded-lua")]
     use_embedded_lua();
     #[cfg(feature = "system-lua")]
@@ -58,10 +60,10 @@ fn use_embedded_lua() {
         cc_config.define("LUA_USE_API_CHECK", None);
     }
 
-    cc_config.include("src/embedded");
+    cc_config.include("embedded");
     add_lua_sources!(
         cc_config,
-        "src/embedded",
+        "embedded",
         [
             "lapi.c",
             "lauxlib.c",
