@@ -6,6 +6,12 @@ extern crate pkg_config;
 extern crate vcpkg;
 
 fn main() {
+    if cfg!(not(any(feature = "embedded-lua", feature = "system-lua"))) {
+        panic!("missing feature 'embedded-lua' or 'system-lua'");
+    } else if cfg!(all(feature = "embedded-lua", feature = "system-lua")) {
+        panic!("conflicting features: 'embedded-lua' and 'system-lua'");
+    }
+
     println!("cargo:rerun-if-changed=src");
 
     #[cfg(feature = "embedded-lua")]

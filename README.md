@@ -19,6 +19,14 @@ vcpkg install --triplet x64-windows lua
 cargo build
 ```
 
+### Cargo features:
+- **std**: Uses stdlib.
+- **embedded-lua**: Links againsts the embedded Lua library.
+- **system-lua**: Attempts to link against the system Lua library.
+  conflicts with `embedded-lua`
+
+Features `std` and `embedded-lua` are enabled by default
+
 ## License
 
 Licensed under either of

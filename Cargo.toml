@@ -10,11 +10,18 @@ keywords = ["lua"]
 categories = ["api-bindings", "development-tools::ffi"]
 
 [dependencies]
-lua-sys = { path = "lua-sys", default-features = false }
+libc = "^0.2.65"
+
+[dependencies.lua-sys]
+path = "lua-sys"
+default-features = false
+features = ["va-list"]
 
 [features]
-default = ["embedded-lua"]
+default = ["embedded-lua", "std"]
 embedded-lua = ["lua-sys/embedded-lua"]
+system-lua = ["lua-sys/system-lua"]
+std = ["lua-sys/std"]
 
 [[example]]
 name = "basic"

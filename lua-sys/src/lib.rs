@@ -1,6 +1,6 @@
 //! lua-sys - Raw ffi bindings for Lua 5.3
 
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
 #![allow(non_camel_case_types, non_upper_case_globals, non_snake_case)]
 #![allow(clippy::missing_safety_doc)]
 

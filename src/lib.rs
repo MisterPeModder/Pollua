@@ -1,9 +1,12 @@
+#![cfg_attr(not(feature = "std"), no_std)]
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 
+extern crate libc;
 extern crate lua_sys;
 
+use core::ptr;
+use libc::*;
 use lua_sys::*;
-use std::ffi::c_void;
 
 #[repr(transparent)]
 pub struct State {
@@ -48,7 +51,7 @@ impl Default for State {
     fn default() -> State {
         unsafe {
             State {
-                inner: luaL_newstate(),
+                inner: lua_newstate(Some(lua_alloc), ptr::null_mut()),
             }
         }
     }
@@ -59,5 +62,19 @@ impl Drop for State {
         unsafe {
             lua_close(self.inner);
         }
+    }
+}
+
+unsafe extern "C" fn lua_alloc(
+    _ud: *mut libc::c_void,
+    ptr: *mut libc::c_void,
+    _osize: usize,
+    nsize: usize,
+) -> *mut libc::c_void {
+    if nsize == 0 {
+        libc::free(ptr);
+        ptr::null_mut()
+    } else {
+        libc::realloc(ptr, nsize)
     }
 }
