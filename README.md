@@ -1,4 +1,6 @@
 # Pollua
+[![Actions Status](https://github.com/MisterPeModder/Pollua/workflows/CI/badge.svg)](https://github.com/MisterPeModder/Pollua/actions)
+=========================
 
 (WIP) rust bindings to Lua 5.3
 
