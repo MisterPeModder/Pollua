@@ -6,19 +6,19 @@ use crate::*;
 
 #[repr(C)]
 pub struct lua_Debug {
-    event: libc::c_int,
-    name: *const libc::c_char,
-    namewhat: *const libc::c_char,
-    what: *const libc::c_char,
-    source: *const libc::c_char,
-    currentline: libc::c_int,
-    linedefined: libc::c_int,
-    lastlinedefined: libc::c_int,
-    nups: libc::c_uchar,
-    nparams: libc::c_uchar,
-    isvararg: libc::c_char,
-    istailcall: libc::c_char,
-    short_src: [libc::c_char; LUA_IDSIZE],
+    pub event: libc::c_int,
+    pub name: *const libc::c_char,
+    pub namewhat: *const libc::c_char,
+    pub what: *const libc::c_char,
+    pub source: *const libc::c_char,
+    pub currentline: libc::c_int,
+    pub linedefined: libc::c_int,
+    pub lastlinedefined: libc::c_int,
+    pub nups: libc::c_uchar,
+    pub nparams: libc::c_uchar,
+    pub isvararg: libc::c_char,
+    pub istailcall: libc::c_char,
+    pub short_src: [libc::c_char; LUA_IDSIZE],
     /* private part */
     _private: private::lua_Debug,
 }
