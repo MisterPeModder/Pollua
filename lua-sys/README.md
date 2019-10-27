@@ -2,15 +2,53 @@
 
 ## Building
 
-Cargo features:
+### Cargo features:
 - **std**: Uses stdlib.
 - **va-list**: Defines bindings for functions that have `va-list` in their arguments,
-  a dependency on the [va_list](https://crates.io/crates/va_list) crate.
+    a dependency on the [va_list](https://crates.io/crates/va_list) crate.
 - **embedded-lua**: Links againsts the embedded Lua library.
 - **system-lua**: Attempts to link against the system Lua library.
-  conflicts with `embedded-lua`
+    conflicts with `embedded-lua`
+- **lua-compat**: Enables compatibilty for Lua versions 5.1 and 5.2.
 
-Features `std`, `embedded-lua` and `va-list` are enabled by default
+Features `std`, `embedded-lua` and `va-list` are enabled by default.
+
+### Lua Configuration:
+Properties of the Lua library can be changed by defining the following environment variables:
+LUA_CONF_PREFIX
+- `LUA_32BITS`:
+    Enables Lua with 32-bit integers and 32-bit floats.
+- `LUA_C89_NUMBERS`
+    Ensures that Lua uses the largest types available for C89.
+- `LUA_USE_C89`
+    Controls the use of non-ISO-C89 features.
+- `LUA_COMPAT_5_2`
+    Controls compatibility with Lua 5.2, same as cargo feature `lua-compat`.
+- `LUA_COMPAT_5_1`
+    Controls compatibility with Lua 5.1, same as cargo feature `lua-compat`.
+- `LUA_COMPAT_FLOATSTRING`
+    Makes Lua format integral floats without a float mark ('.0').
+- `LUA_NOCVTN2S`
+    Define to turn off automatic coercion from numbers to strings.
+- `LUA_NOCVTS2N`
+    Define LUA_NOCVTS2N to turn off automatic coercion from strings to numbers.
+- `LUA_INT_TYPE="LUA_INT_INT" | "LUA_INT_LONG" | "LUA_INT_LONGLONG"`
+    Defines the type for Lua integers.
+- `LUA_FLOAT_TYPE="LUA_FLOAT_FLOAT" | "LUA_FLOAT_DOUBLE" | "LUA_FLOAT_LONGDOUBLE"`
+    Defines the type for Lua floats.
+
+Example:
+```sh
+$ export LUA_32BITS=1
+$ export LUA_COMPAT_5_2=1
+$ export LUA_INT_TYPE="LUA_INT_INT"
+$ cargo build
+```
+
+The `LUA_CONF_PREFIX` variable can be used to change the name of the above variable:
+```sh
+$ LUA_CONF_PREFIX="MY_CONF_" MY_CONF_LUA_COMPAT_5_2=1 cargo build
+```
 
 ## License
 

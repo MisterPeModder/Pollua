@@ -5,7 +5,7 @@ repository = "https://github.com/MisterPeModder/Pollua"
 version = "0.1.0"
 authors = ["Yanis Guaye <yguaye44@gmail.com>"]
 edition = "2018"
-build = "build.rs"
+build = "build/main.rs"
 keywords = ["lua"]
 categories = ["external-ffi-bindings", "development-tools::ffi"]
 license = "MIT OR Apache-2.0"
@@ -13,9 +13,11 @@ license = "MIT OR Apache-2.0"
 [dependencies]
 libc = "^0.2.65"
 va_list = {version = "^0.1.3", optional = true }
+cfg-if = "^0.1.10"
 
 [build-dependencies]
-rustc_version = "0.2.3"
+libc = "^0.2.65"
+rustc_version = "^0.2.3"
 cc = { version = "~1.0.46", optional = true }
 bindgen = { version = "^0.51.1", optional = true }
 
@@ -23,11 +25,12 @@ bindgen = { version = "^0.51.1", optional = true }
 pkg-config = { version = "^0.3.16", optional = true }
 
 [target.'cfg(target_env = "msvc")'.build-dependencies]
-vcpkg = "^0.2.7"
+vcpkg = { version = "^0.2.7", optional = true }
 
 [features]
 default = ["embedded-lua", "va-list", "std"]
 embedded-lua = ["cc"]
-system-lua = ["pkg-config"]
+system-lua = ["pkg-config", "vcpkg"]
 va-list = ["va_list"]
 std = []
+lua-compat = []

@@ -1,3 +1,4 @@
+use crate::*;
 use core::ptr;
 
 //////////////////////////////////////////////////
@@ -82,8 +83,8 @@ pub const LUA_EXTRASPACE: usize = ::core::mem::size_of::<*const libc::c_void>();
 
 pub const LUA_IDSIZE: usize = 60;
 
-pub const LUA_MAXINTEGER: libc::c_int = libc::INT_MAX;
-pub const LUA_MININTEGER: libc::c_int = libc::INT_MIN;
+pub const LUA_MAXINTEGER: lua_Integer = lua_Integer::max_value();
+pub const LUA_MININTEGER: lua_Integer = lua_Integer::min_value();
 
 //////////////////////////////////////////////////
 // Lua types                                    //
@@ -100,15 +101,9 @@ pub type lua_Alloc = Option<
 
 pub type lua_CFunction = Option<unsafe extern "C" fn(L: *mut lua_State) -> libc::c_int>;
 
-pub type lua_Integer = libc::c_longlong;
-
-pub type lua_KContext = isize;
-
 pub type lua_KFunction = Option<
     unsafe extern "C" fn(L: *mut lua_State, status: libc::c_int, ctx: lua_KContext) -> libc::c_int,
 >;
-
-pub type lua_Number = f64;
 
 pub type lua_Reader = Option<
     unsafe extern "C" fn(
@@ -341,7 +336,7 @@ pub unsafe fn lua_newtable(L: *mut lua_State) {
 
 #[inline]
 pub unsafe fn lua_numbertointeger(n: lua_Number, p: *mut lua_Integer) -> libc::c_int {
-    if n >= lua_Number::from(LUA_MININTEGER) && n < -lua_Number::from(LUA_MININTEGER) {
+    if n >= LUA_MININTEGER as lua_Number && n < -(LUA_MININTEGER as lua_Number) {
         *p = n as lua_Integer;
         1
     } else {

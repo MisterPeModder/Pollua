@@ -1,4 +1,4 @@
-# Pollua
+Pollua
 [![Actions Status](https://github.com/MisterPeModder/Pollua/workflows/CI/badge.svg)](https://github.com/MisterPeModder/Pollua/actions)
 =========================
 
@@ -25,9 +25,10 @@ cargo build
 - **std**: Uses stdlib.
 - **embedded-lua**: Links againsts the embedded Lua library.
 - **system-lua**: Attempts to link against the system Lua library.
-  conflicts with `embedded-lua`
+    conflicts with `embedded-lua`
+- **lua-compat**: Enables compatibilty for Lua versions 5.1 and 5.2.
 
-Features `std` and `embedded-lua` are enabled by default
+Features `std` and `embedded-lua` are enabled by default.
 
 ## License
 

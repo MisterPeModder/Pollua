@@ -1,18 +1,23 @@
 #[cfg(feature = "embedded-lua")]
 extern crate cc;
+extern crate libc;
 #[cfg(all(not(target_env = "msvc"), feature = "system-lua"))]
 extern crate pkg_config;
 extern crate rustc_version;
 #[cfg(all(target_env = "msvc", feature = "system-lua"))]
 extern crate vcpkg;
 
+mod luaconf;
+
 fn main() {
+    println!("cargo:rustc-cfg=lua_64_bits");
     check_features();
     check_rustc_version();
     println!("cargo:rerun-if-changed=src");
-    #[cfg(feature = "embedded-lua")]
+
+    #[cfg(all(feature = "embedded-lua", not(feature = "system-lua")))]
     use_embedded_lua();
-    #[cfg(feature = "system-lua")]
+    #[cfg(all(feature = "system-lua", not(feature = "embedded-lua")))]
     use_system_lua();
 }
 
@@ -30,14 +35,14 @@ fn check_rustc_version() {
     }
 }
 
-#[cfg(feature = "embedded-lua")]
+#[cfg(all(feature = "embedded-lua", not(feature = "system-lua")))]
 macro_rules! add_lua_sources {
     ($cfg:ident, $root:expr, [$($file:expr),*]) => {
         $($cfg.file(::std::path::Path::new($root).join($file)));*
     };
 }
 
-#[cfg(feature = "embedded-lua")]
+#[cfg(all(feature = "embedded-lua", not(feature = "system-lua")))]
 fn use_embedded_lua() {
     use std::env;
 
@@ -46,6 +51,7 @@ fn use_embedded_lua() {
 
     let mut cc_config = cc::Build::new();
 
+    luaconf::configure(luaconf::LuaConfig::new(&mut cc_config));
     if let Some(define) = match (target_os.as_str(), target_family.as_str()) {
         ("linux", _) => Some("LUA_USE_LINUX"),
         ("macos", _) => Some("LUA_USE_MACOSX"),
@@ -104,8 +110,9 @@ fn use_embedded_lua() {
     cc_config.compile("liblua5.3.a");
 }
 
-#[cfg(feature = "system-lua")]
+#[cfg(all(feature = "system-lua", not(feature = "embedded-lua")))]
 fn use_system_lua() {
+    luaconf::configure(luaconf::LuaConfig::new());
     #[cfg(target_env = "msvc")]
     find_vcpkg();
     #[cfg(not(target_env = "msvc"))]
@@ -115,7 +122,11 @@ fn use_system_lua() {
 /// Attempts to find the Lua package with vcpkg.
 ///
 /// panics if the package was not found.
-#[cfg(all(target_env = "msvc", feature = "system-lua"))]
+#[cfg(all(
+    target_env = "msvc",
+    feature = "system-lua",
+    not(feature = "embedded-lua")
+))]
 fn find_vcpkg() {
     vcpkg::Config::new()
         .emit_includes(true)
@@ -126,7 +137,11 @@ fn find_vcpkg() {
 /// Attempts to find the Lua package using pkg-config.
 ///
 /// panics if the package was not found.
-#[cfg(all(not(target_env = "msvc"), feature = "system-lua"))]
+#[cfg(all(
+    not(target_env = "msvc"),
+    feature = "system-lua",
+    not(feature = "embedded-lua")
+))]
 fn find_pkg_config() {
     pkg_config::Config::new()
         .atleast_version("5.3")
