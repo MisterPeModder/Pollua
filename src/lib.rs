@@ -8,6 +8,11 @@ use core::ptr;
 use libc::*;
 use lua_sys::*;
 
+#[cfg(feature = "export-sys")]
+pub mod sys {
+    pub use lua_sys::*;
+}
+
 #[repr(transparent)]
 pub struct State {
     inner: *mut lua_State,

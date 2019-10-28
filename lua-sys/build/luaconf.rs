@@ -56,6 +56,85 @@ pub fn configure(mut config: LuaConfig) {
 
     config.emit("LUA_INT_TYPE", int_type.as_ref().map(|x| &**x));
     config.emit("LUA_FLOAT_TYPE", float_type.as_ref().map(|x| &**x));
+
+    emit_lua_version(&mut config);
+}
+
+const EMBEDDED_VERSION: (u32, u32, u32) = (5, 3, 5);
+
+fn emit_lua_version(config: &mut LuaConfig) {
+    use std::fs::File;
+    use std::io::BufWriter;
+    use std::io::Write;
+    use std::path::Path;
+
+    let path = Path::new(&env::var("OUT_DIR").unwrap()).join("lua_version.rs");
+
+    let mut out =
+        BufWriter::new(File::create(&path).expect(&format!("Could not create {}", path.display())));
+
+    let (major, minor, patch) = match config.env("LUA_VERSION") {
+        Some(v) => {
+            let version = parse_lua_version(&v);
+            #[cfg(feature = "embedded-lua")]
+            {
+                println!(
+                    "cargo:warning=Tried to override LUA_VERSION of embedded Lua from {}.{}.{} to {}.{}.{}",
+                    EMBEDDED_VERSION.0,
+                    EMBEDDED_VERSION.1,
+                    EMBEDDED_VERSION.2,
+                    version.0,
+                    version.1,
+                    version.2,
+                );
+                EMBEDDED_VERSION
+            }
+            #[cfg(not(feature = "embedded-lua"))]
+            {
+                println!("Lua version: {}.{}.{}", version.0, version.1, version.2);
+                version
+            }
+        }
+        None => EMBEDDED_VERSION,
+    };
+
+    writeln!(out, "pub const VERSION_MAJOR: &str = \"{}\";", major).unwrap();
+    writeln!(out, "pub const VERSION_MINOR: &str = \"{}\";", minor).unwrap();
+    writeln!(out, "pub const VERSION_RELEASE: &str = \"{}\";", patch).unwrap();
+    writeln!(out, "pub const VERSION_NUM: u32 = {};", major * 100 + minor).unwrap();
+    let version = format!("Lua {}.{}", major, minor);
+    writeln!(out, "pub const VERSION: &str = \"{}\";", version).unwrap();
+    let release = format!("{}.{}", &version, patch);
+    writeln!(out, "pub const RELEASE: &str = \"{}\";", release).unwrap();
+}
+
+fn parse_lua_version(version: &str) -> (u32, u32, u32) {
+    let mut version = version.trim();
+    if version.starts_with("Lua") {
+        version = (&version[3..]).trim();
+    }
+    let mut split = version.split(".");
+    let release = (
+        split
+            .next()
+            .expect("missing major in LUA_VERSION")
+            .parse()
+            .expect("invalid major in LUA_VERSION"),
+        split
+            .next()
+            .expect("missing minor in LUA_VERSION")
+            .parse()
+            .expect("invalid minor in LUA_VERSION"),
+        split
+            .next()
+            .expect("missing patch in LUA_VERSION")
+            .parse()
+            .expect("invalid patch in LUA_VERSION"),
+    );
+    if split.next().is_some() {
+        panic!("LUA_VERSION must be of format major.minor.patch");
+    }
+    release
 }
 
 #[cfg(feature = "embedded-lua")]

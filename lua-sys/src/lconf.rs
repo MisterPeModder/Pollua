@@ -2,6 +2,18 @@ use crate::*;
 
 use core::mem;
 
+// Defines values for the LUA_VERSION_* constants
+mod version {
+    include!(concat!(env!("OUT_DIR"), "/lua_version.rs"));
+}
+
+pub const LUA_VERSION_MAJOR: &str = version::VERSION_MAJOR;
+pub const LUA_VERSION_MINOR: &str = version::VERSION_MINOR;
+pub const LUA_VERSION_RELEASE: &str = version::VERSION_RELEASE;
+pub const LUA_VERSION_NUM: u32 = version::VERSION_NUM;
+pub const LUA_VERSION: &str = version::VERSION;
+pub const LUA_RELEASE: &str = version::RELEASE;
+
 // Integer types
 cfg_if::cfg_if! {
     if #[cfg(LUA_FLOAT_TYPE="LUA_FLOAT_FLOAT")] {

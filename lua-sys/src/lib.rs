@@ -8,13 +8,13 @@ extern crate libc;
 #[cfg(feature = "va-list")]
 extern crate va_list;
 
-mod conf;
-mod debug;
+mod lconf;
 mod lcore;
+mod ldebug;
 
-pub use conf::*;
-pub use debug::*;
+pub use lconf::*;
 pub use lcore::*;
+pub use ldebug::*;
 
 #[cfg(lua_32_bits)]
 pub fn foo() {
