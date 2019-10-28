@@ -1,5 +1,5 @@
+[![Actions Status]][Github-Actions]
 Pollua
-[![Actions Status](https://github.com/MisterPeModder/Pollua/workflows/CI/badge.svg)](https://github.com/MisterPeModder/Pollua/actions)
 =========================
 
 (WIP) rust bindings to Lua 5.3
@@ -46,3 +46,6 @@ at your option.
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
 dual licensed as above, without any additional terms or conditions.
+
+[Actions Status]: https://github.com/MisterPeModder/Pollua/workflows/CI/badge.svg
+[Github-Actions]: https://github.com/MisterPeModder/Pollua/actions
