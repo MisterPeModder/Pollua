@@ -27,3 +27,7 @@ export-sys = []
 [[example]]
 name = "version"
 required-features = ["export-sys"]
+
+[[example]]
+name = "interpreter"
+required-features = ["export-sys"]
