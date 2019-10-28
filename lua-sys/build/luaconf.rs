@@ -101,7 +101,12 @@ fn emit_lua_version(config: &mut LuaConfig) {
     writeln!(out, "pub const VERSION_MAJOR: &str = \"{}\";", major).unwrap();
     writeln!(out, "pub const VERSION_MINOR: &str = \"{}\";", minor).unwrap();
     writeln!(out, "pub const VERSION_RELEASE: &str = \"{}\";", patch).unwrap();
-    writeln!(out, "pub const VERSION_NUM: u32 = {};", major * 100 + minor).unwrap();
+    writeln!(
+        out,
+        "pub const VERSION_NUM: crate::lua_Number = {}.0;",
+        major * 100 + minor
+    )
+    .unwrap();
     let version = format!("Lua {}.{}", major, minor);
     writeln!(out, "pub const VERSION: &str = \"{}\";", version).unwrap();
     let release = format!("{}.{}", &version, patch);

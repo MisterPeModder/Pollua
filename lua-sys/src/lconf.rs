@@ -10,7 +10,7 @@ mod version {
 pub const LUA_VERSION_MAJOR: &str = version::VERSION_MAJOR;
 pub const LUA_VERSION_MINOR: &str = version::VERSION_MINOR;
 pub const LUA_VERSION_RELEASE: &str = version::VERSION_RELEASE;
-pub const LUA_VERSION_NUM: u32 = version::VERSION_NUM;
+pub const LUA_VERSION_NUM: lua_Number = version::VERSION_NUM;
 pub const LUA_VERSION: &str = version::VERSION;
 pub const LUA_RELEASE: &str = version::RELEASE;
 
