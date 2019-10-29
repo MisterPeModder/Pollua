@@ -1,4 +1,4 @@
-//! lua-sys - Raw ffi bindings for Lua 5.3
+//! lua-sys - Raw ffi bindings for Lua 5.x
 
 #![cfg_attr(not(feature = "std"), no_std)]
 #![allow(non_camel_case_types, non_upper_case_globals, non_snake_case)]
@@ -12,13 +12,10 @@ mod laux;
 mod lconf;
 mod lcore;
 mod ldebug;
+mod llib;
 
 pub use laux::*;
 pub use lconf::*;
 pub use lcore::*;
 pub use ldebug::*;
-
-#[cfg(lua_32_bits)]
-pub fn foo() {
-    println!("BAR!");
-}
+pub use llib::*;

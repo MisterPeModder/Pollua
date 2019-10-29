@@ -13,6 +13,7 @@ pub const LUA_VERSION_RELEASE: &str = version::VERSION_RELEASE;
 pub const LUA_VERSION_NUM: lua_Number = version::VERSION_NUM;
 pub const LUA_VERSION: &str = version::VERSION;
 pub const LUA_RELEASE: &str = version::RELEASE;
+pub const LUA_VERSUFFIX: &str = version::LUA_VERSUFFIX;
 
 // Integer types
 cfg_if::cfg_if! {
@@ -55,46 +56,6 @@ cfg_if::cfg_if! {
         pub const LUA_INTEGER_FMT: &str = "%ld";
     } else {
         compile_error!("Lua numeric integer type not defined");
-    }
-}
-
-// Lua 5.2 Compatibility
-cfg_if::cfg_if! {
-    if #[cfg(any(LUA_COMPAT_5_2, feature = "lua-compat"))] {
-        pub const LUA_COMPAT_MATHLIB: bool = true;
-        pub const LUA_COMPAT_BITLIB: bool = true;
-        pub const LUA_COMPAT_IPAIRS: bool = true;
-        pub const LUA_COMPAT_APIINTCASTS: bool = true;
-    } else {
-        pub const LUA_COMPAT_MATHLIB: bool = false;
-        pub const LUA_COMPAT_BITLIB: bool = false;
-        pub const LUA_COMPAT_IPAIRS: bool = false;
-        pub const LUA_COMPAT_APIINTCASTS: bool = false;
-    }
-}
-
-// Lua 5.1 Compatibility
-cfg_if::cfg_if! {
-    if #[cfg(any(LUA_COMPAT_5_1, feature = "lua-compat"))] {
-        // Already defined if Lua 5.2 compat is enabled
-        #[cfg(all(not(LUA_COMPAT_5_2), not(feature = "lua-compat")))]
-        pub const LUA_COMPAT_MATHLIB: bool = true;
-        #[cfg(all(not(LUA_COMPAT_5_2), not(feature = "lua-compat")))]
-        pub const LUA_COMPAT_APIINTCASTS: bool = true;
-
-        pub const LUA_COMPAT_UNPACK: bool = true;
-        pub const LUA_COMPAT_LOADERS: bool = true;
-        pub const LUA_COMPAT_LOG10: bool = true;
-        pub const LUA_COMPAT_LOADSTRING: bool = true;
-        pub const LUA_COMPAT_MAXN: bool = true;
-        pub const LUA_COMPAT_MODULE: bool = true;
-    } else {
-        pub const LUA_COMPAT_UNPACK: bool = false;
-        pub const LUA_COMPAT_LOADERS: bool = false;
-        pub const LUA_COMPAT_LOG10: bool = false;
-        pub const LUA_COMPAT_LOADSTRING: bool = false;
-        pub const LUA_COMPAT_MAXN: bool = false;
-        pub const LUA_COMPAT_MODULE: bool = false;
     }
 }
 

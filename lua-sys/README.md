@@ -18,18 +18,12 @@ Features `std`, `embedded-lua` and `va-list` are enabled by default.
 ### Lua Configuration:
 Properties of the Lua library can be changed by defining the following environment variables:
 LUA_CONF_PREFIX
-- `LUA_32BITS`:
+- `LUA_32BITS`
     Enables Lua with 32-bit integers and 32-bit floats.
 - `LUA_C89_NUMBERS`
     Ensures that Lua uses the largest types available for C89.
 - `LUA_USE_C89`
     Controls the use of non-ISO-C89 features.
-- `LUA_COMPAT_5_2`
-    Controls compatibility with Lua 5.2, same as cargo feature `lua-compat`.
-- `LUA_COMPAT_5_1`
-    Controls compatibility with Lua 5.1, same as cargo feature `lua-compat`.
-- `LUA_COMPAT_FLOATSTRING`
-    Makes Lua format integral floats without a float mark ('.0').
 - `LUA_NOCVTN2S`
     Define to turn off automatic coercion from numbers to strings.
 - `LUA_NOCVTS2N`
@@ -38,13 +32,15 @@ LUA_CONF_PREFIX
     Defines the type for Lua integers.
 - `LUA_FLOAT_TYPE="LUA_FLOAT_FLOAT" | "LUA_FLOAT_DOUBLE" | "LUA_FLOAT_LONGDOUBLE"`
     Defines the type for Lua floats.
+- `LUA_VERSION="<major>.<minor>.<patch>"`
+    Sets the system Lua version, defaults to `"5.3.5"`.
 
 Example:
 ```sh
 $ export LUA_32BITS=1
-$ export LUA_COMPAT_5_2=1
 $ export LUA_INT_TYPE="LUA_INT_INT"
-$ cargo build
+$ export LUA_VERSION="5.2"
+$ cargo build --no-default-features --features "system-lua va-list"
 ```
 
 The `LUA_CONF_PREFIX` variable can be used to change the name of the above variable:

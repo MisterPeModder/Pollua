@@ -10,9 +10,6 @@ pub fn configure(mut config: LuaConfig) {
     let bits32 = config.emit_if_defined("LUA_32BITS");
     let c89_numbers = config.emit_if_defined("LUA_C89_NUMBERS");
     config.emit_if_defined("LUA_USE_C89");
-    config.emit_if_defined("LUA_COMPAT_5_2");
-    config.emit_if_defined("LUA_COMPAT_5_1");
-    config.emit_if_defined("LUA_COMPAT_FLOATSTRING");
     config.emit_if_defined("LUA_NOCVTN2S");
     config.emit_if_defined("LUA_NOCVTS2N");
 
@@ -70,9 +67,6 @@ fn emit_lua_version(config: &mut LuaConfig) {
 
     let path = Path::new(&env::var("OUT_DIR").unwrap()).join("lua_version.rs");
 
-    let mut out =
-        BufWriter::new(File::create(&path).expect(&format!("Could not create {}", path.display())));
-
     let (major, minor, patch) = match config.env("LUA_VERSION") {
         Some(v) => {
             let version = parse_lua_version(&v);
@@ -98,6 +92,18 @@ fn emit_lua_version(config: &mut LuaConfig) {
         None => EMBEDDED_VERSION,
     };
 
+    if major != 5 {
+        panic!("LUA_VERSION major must be equal to 5");
+    }
+
+    // emits LUA_VERSION with values from major.0 to major.minor
+    for m in 0..=minor {
+        println!("cargo:rustc-cfg=LUA_VERSION=\"{}.{}\"", major, m);
+    }
+
+    let mut out =
+        BufWriter::new(File::create(&path).expect(&format!("Could not create {}", path.display())));
+
     writeln!(out, "pub const VERSION_MAJOR: &str = \"{}\";", major).unwrap();
     writeln!(out, "pub const VERSION_MINOR: &str = \"{}\";", minor).unwrap();
     writeln!(out, "pub const VERSION_RELEASE: &str = \"{}\";", patch).unwrap();
@@ -111,6 +117,12 @@ fn emit_lua_version(config: &mut LuaConfig) {
     writeln!(out, "pub const VERSION: &str = \"{}\";", version).unwrap();
     let release = format!("{}.{}", &version, patch);
     writeln!(out, "pub const RELEASE: &str = \"{}\";", release).unwrap();
+    writeln!(
+        out,
+        "pub const LUA_VERSUFFIX: &str = \"_{}_{}\";",
+        major, minor
+    )
+    .unwrap();
 }
 
 fn parse_lua_version(version: &str) -> (u32, u32, u32) {
