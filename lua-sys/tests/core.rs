@@ -1,46 +1,9 @@
 extern crate lua_sys;
+mod common;
 
+use common::*;
 use lua_sys::*;
 use std::ffi::CStr;
-use std::ptr;
-
-#[inline]
-fn cstr(literal: &'static [u8]) -> *const libc::c_char {
-    CStr::from_bytes_with_nul(literal)
-        .expect("invalid c string")
-        .as_ptr()
-}
-
-fn run_thread<F: Fn(*mut lua_State)>(func: F) {
-    // `lua_Alloc` implementation
-    unsafe extern "C" fn alloc(
-        _ud: *mut libc::c_void,
-        ptr: *mut libc::c_void,
-        _osize: usize,
-        nsize: usize,
-    ) -> *mut libc::c_void {
-        if nsize == 0 {
-            libc::free(ptr);
-            ptr::null_mut()
-        } else {
-            libc::realloc(ptr, nsize)
-        }
-    }
-
-    unsafe extern "C" fn at_panic(l: *mut lua_State) -> libc::c_int {
-        panic!(
-            "Lua panic: {}",
-            CStr::from_ptr(lua_tostring(l, -1)).to_string_lossy()
-        );
-    }
-
-    unsafe {
-        let l = lua_newstate(alloc, ptr::null_mut());
-        lua_atpanic(l, at_panic);
-        func(l);
-        lua_close(l);
-    }
-}
 
 #[test]
 fn test_check_version() {
@@ -52,9 +15,6 @@ fn test_check_version() {
 #[test]
 fn test_arith() {
     run_thread(|l| unsafe {
-        let mut isnum = 0;
-        let isnum_p = &mut isnum as *mut libc::c_int;
-
         lua_pushinteger(l, 1);
         lua_pushinteger(l, 2);
         lua_arith(l, LUA_OPADD);
@@ -63,54 +23,6 @@ fn test_arith() {
         lua_pushinteger(l, 10);
         lua_arith(l, LUA_OPSUB);
         assert_eq!(lua_tointeger(l, 1), -7);
-
-        lua_pushinteger(l, 10);
-        lua_arith(l, LUA_OPMUL);
-        assert_eq!(lua_tointeger(l, 1), -70);
-
-        lua_pushinteger(l, 1);
-        lua_arith(l, LUA_OPDIV);
-        assert_eq!(lua_tointeger(l, 1), -70);
-
-        lua_pushinteger(l, -7);
-        lua_arith(l, LUA_OPIDIV);
-        assert_eq!(lua_tointeger(l, 1), 10);
-
-        lua_pushinteger(l, 9);
-        lua_arith(l, LUA_OPMOD);
-        assert_eq!(lua_tointeger(l, 1), 1);
-
-        lua_pushinteger(l, 1);
-        lua_arith(l, LUA_OPPOW);
-        assert_eq!(lua_tointeger(l, 1), 1);
-
-        lua_arith(l, LUA_OPUNM);
-        assert_eq!(lua_tointeger(l, 1), -1);
-
-        lua_arith(l, LUA_OPBNOT);
-        assert_eq!(lua_tointegerx(l, 1, isnum_p), 0);
-        assert_eq!(isnum != 0, true);
-
-        lua_pushinteger(l, 2984);
-        lua_arith(l, LUA_OPBAND);
-        assert_eq!(lua_tointegerx(l, 1, isnum_p), 0);
-        assert_eq!(isnum != 0, true);
-
-        lua_pushinteger(l, 42);
-        lua_arith(l, LUA_OPBOR);
-        assert_eq!(lua_tointeger(l, 1), 42);
-
-        lua_pushinteger(l, 21);
-        lua_arith(l, LUA_OPBXOR);
-        assert_eq!(lua_tointeger(l, 1), 63);
-
-        lua_pushinteger(l, 2);
-        lua_arith(l, LUA_OPSHL);
-        assert_eq!(lua_tointeger(l, 1), 252);
-
-        lua_pushinteger(l, 3);
-        lua_arith(l, LUA_OPSHR);
-        assert_eq!(lua_tointeger(l, 1), 31);
     });
 }
 
@@ -134,7 +46,7 @@ fn test_call_cfunction() {
 
     run_thread(|l| unsafe {
         let fname = cstr(b"sum\0");
-        lua_register(l, fname, sum);
+        lua_register(l, fname, Some(sum));
 
         // sum() -- 0, 0
         lua_getglobal(l, fname);
