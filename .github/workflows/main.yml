@@ -3,7 +3,6 @@ name: CI
 on: [push, pull_request]
 
 jobs:
-
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -16,20 +15,19 @@ jobs:
           rustup toolchain update --no-self-update stable
           rustup default stable
           rustup component add clippy rustfmt
+
       - name: Run rustfmt
         run: cargo fmt -- --check
 
       - name: Run clippy
         run: cargo clippy --all -- -Dwarnings
 
-  test:
-    name: Test
+  embedded-lua-test:
+    name: Embedded Lua Test
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
-        cargo_flags:
-          - ""
         include:
           # Integration tests are disabled on Windows as they take *way* too
           # long to pull the Docker image
@@ -43,8 +41,42 @@ jobs:
         run: |
           rustup toolchain update --no-self-update stable
           rustup default stable
+
+      - name: Build Pollua
+        run: cargo build --all
+
+      - name: Test Pollua
+        run: >
+          cargo test --all -vv
+          --no-default-features --features "embedded-lua"
+          -- ${{ matrix.test_flags }}
+
+  system-lua-test:
+    name: System Lua Test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+    steps:
+      - name: Checkout the source code
+        uses: actions/checkout@master
+
+      - name: Install Rust stable
+        run: |
+          rustup toolchain update --no-self-update stable
+          rustup default stable
+
+      - name: Install Lua 5.3
+        run: |
+          sudo apt-get update
+          sudo apt-get install liblua5.3-dev -y
+          sudo apt-get install pkg-config -y
+
       - name: Build Pollua
         run: cargo build --all ${{ matrix.cargo_flags }}
 
       - name: Test Pollua
-        run: cargo test --all ${{ matrix.cargo_flags }} -- ${{ matrix.test_flags }}
+        run: >
+          cargo test --all -vv
+          --no-default-features --features "system-lua"
+          -- ${{ matrix.test_flags }}

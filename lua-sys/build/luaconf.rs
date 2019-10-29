@@ -66,8 +66,9 @@ fn emit_lua_version(config: &mut LuaConfig) {
     use std::path::Path;
 
     let path = Path::new(&env::var("OUT_DIR").unwrap()).join("lua_version.rs");
+    let version_str = config.env("LUA_VERSION").or_else(|| config.version.clone());
 
-    let (major, minor, patch) = match config.env("LUA_VERSION") {
+    let (major, minor, patch) = match version_str {
         Some(v) => {
             let version = parse_lua_version(&v);
             #[cfg(feature = "embedded-lua")]
@@ -158,11 +159,13 @@ fn parse_lua_version(version: &str) -> (u32, u32, u32) {
 pub struct LuaConfig<'a> {
     build: &'a mut cc::Build,
     prefix: Option<String>,
+    version: Option<String>,
 }
 
 #[cfg(not(feature = "embedded-lua"))]
 pub struct LuaConfig<'a> {
     prefix: Option<String>,
+    version: Option<String>,
     _marker: ::std::marker::PhantomData<&'a ()>,
 }
 
@@ -172,6 +175,7 @@ impl LuaConfig<'_> {
         LuaConfig {
             prefix: None,
             build: build,
+            version: None,
         }
     }
 
@@ -179,8 +183,13 @@ impl LuaConfig<'_> {
     pub fn new() -> LuaConfig<'static> {
         LuaConfig {
             prefix: None,
+            version: None,
             _marker: ::std::marker::PhantomData,
         }
+    }
+
+    pub fn set_version(&mut self, version: &str) {
+        self.version = Some(version.to_owned());
     }
 
     pub fn set_prefix(&mut self, prefix: &str) {

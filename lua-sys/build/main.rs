@@ -1,13 +1,17 @@
+#![allow(dead_code)]
+
 #[cfg(feature = "embedded-lua")]
 extern crate cc;
 extern crate libc;
-#[cfg(all(not(target_env = "msvc"), feature = "system-lua"))]
+#[cfg(feature = "system-lua")]
 extern crate pkg_config;
 extern crate rustc_version;
 #[cfg(all(target_env = "msvc", feature = "system-lua"))]
 extern crate vcpkg;
 
 mod luaconf;
+
+use luaconf::LuaConfig;
 
 fn main() {
     println!("cargo:rustc-cfg=lua_64_bits");
@@ -51,7 +55,7 @@ fn use_embedded_lua() {
 
     let mut cc_config = cc::Build::new();
 
-    luaconf::configure(luaconf::LuaConfig::new(&mut cc_config));
+    luaconf::configure(LuaConfig::new(&mut cc_config));
     if let Some(define) = match (target_os.as_str(), target_family.as_str()) {
         ("linux", _) => Some("LUA_USE_LINUX"),
         ("macos", _) => Some("LUA_USE_MACOSX"),
@@ -112,11 +116,12 @@ fn use_embedded_lua() {
 
 #[cfg(all(feature = "system-lua", not(feature = "embedded-lua")))]
 fn use_system_lua() {
-    luaconf::configure(luaconf::LuaConfig::new());
-    #[cfg(target_env = "msvc")]
-    find_vcpkg();
-    #[cfg(not(target_env = "msvc"))]
-    find_pkg_config();
+    let mut config = LuaConfig::new();
+
+    if !find_vcpkg() {
+        find_pkg_config(&mut config);
+    }
+    luaconf::configure(config);
 }
 
 /// Attempts to find the Lua package with vcpkg.
@@ -127,24 +132,36 @@ fn use_system_lua() {
     feature = "system-lua",
     not(feature = "embedded-lua")
 ))]
-fn find_vcpkg() {
-    vcpkg::Config::new()
-        .emit_includes(true)
-        .probe("lua")
-        .expect("vcpkg did not find the lua package");
+fn find_vcpkg() -> bool {
+    vcpkg::Config::new().probe("lua").is_ok()
 }
-
-/// Attempts to find the Lua package using pkg-config.
-///
-/// panics if the package was not found.
 #[cfg(all(
     not(target_env = "msvc"),
     feature = "system-lua",
     not(feature = "embedded-lua")
 ))]
-fn find_pkg_config() {
-    pkg_config::Config::new()
-        .atleast_version("5.3")
-        .probe("lua")
-        .expect("pkg-config did not find the lua package");
+fn find_vcpkg() -> bool {
+    false
+}
+
+/// Attempts to find the Lua package using pkg-config.
+///
+/// panics if the package was not found.
+#[cfg(all(feature = "system-lua", not(feature = "embedded-lua")))]
+fn find_pkg_config(config: &mut LuaConfig) {
+    let candidates = ["lua5.3", "lua5.2", "lua5.1", "lua"];
+
+    match candidates.iter().try_fold(None, |_, candidate| {
+        match pkg_config::Config::new().probe(candidate) {
+            Ok(lib) => Err(lib),
+            Err(e) => Ok(Some(e)),
+        }
+    }) {
+        Ok(err) => panic!("pkg-config did not find the lua package: {}", err.unwrap()),
+        Err(lib) => {
+            if !lib.version.is_empty() {
+                config.set_version(&lib.version);
+            }
+        }
+    }
 }
