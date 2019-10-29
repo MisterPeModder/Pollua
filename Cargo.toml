@@ -18,16 +18,13 @@ default-features = false
 features = ["va-list"]
 
 [features]
-default = ["embedded-lua", "std", "export-sys"]
+default = ["embedded-lua", "std"]
 embedded-lua = ["lua-sys/embedded-lua"]
 system-lua = ["lua-sys/system-lua"]
 std = ["lua-sys/std"]
-export-sys = []
 
 [[example]]
 name = "version"
-required-features = ["export-sys"]
 
 [[example]]
 name = "interpreter"
-required-features = ["export-sys"]

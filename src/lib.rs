@@ -8,7 +8,7 @@ use core::ptr;
 use libc::*;
 use lua_sys::*;
 
-#[cfg(feature = "export-sys")]
+/// Re-exported definitions from lua-sys.
 pub mod sys {
     pub use lua_sys::*;
 }
