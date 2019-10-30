@@ -1,7 +1,6 @@
 extern crate pollua;
 
 use pollua::sys;
-use pollua::State;
 
 fn main() {
     println!("===");
@@ -13,7 +12,6 @@ fn main() {
     println!("Patch : {}", sys::LUA_VERSION_RELEASE);
     println!("Number: {}", sys::LUA_VERSION_NUM);
     println!("===");
-    let version = unsafe { *sys::lua_version(State::default().as_mut_ptr()) };
-    println!("lua_version() output: {}", version);
+    println!("pollua::lua_version(): {}", pollua::lua_version());
     println!("===");
 }

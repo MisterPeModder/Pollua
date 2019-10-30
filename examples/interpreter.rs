@@ -1,55 +1,42 @@
 extern crate pollua;
 
 use pollua::sys;
-use pollua::State;
+use pollua::thread::LoadingMode;
+use pollua::Error;
+use pollua::LuaResult;
+use pollua::Thread;
 use std::io;
 use std::io::prelude::*;
 
-fn init_state(state: &mut State) {
+fn init_thread(thread: &mut Thread) {
     unsafe {
-        sys::luaL_checkversion(state.as_mut_ptr());
-        sys::luaL_openlibs(state.as_mut_ptr());
+        sys::luaL_checkversion(thread.as_raw_mut());
+        sys::luaL_openlibs(thread.as_raw_mut());
     }
 }
 
-fn run_line(state: &mut State, line: &str) {
-    unsafe {
-        if validate(
-            state,
-            sys::luaL_loadbufferx(
-                state.as_mut_ptr(),
-                line.as_ptr() as *const _,
-                line.len(),
-                b"<stdin>\0".as_ptr() as *const _,
-                b"t\0".as_ptr() as *const _,
-            ),
-        ) {
-            validate(
-                state,
-                sys::lua_pcall(state.as_mut_ptr(), 0, sys::LUA_MULTRET, 0),
-            );
-        }
+fn run_line(thread: &mut Thread, line: &str) {
+    let res = thread.load_bytes(line, Some("<stdin>"), LoadingMode::Text);
+
+    if validate(thread, res) {
+        validate(
+            thread,
+            Error::from_code(unsafe {
+                sys::lua_pcall(thread.as_raw_mut(), 0, sys::LUA_MULTRET, 0)
+            }),
+        );
     }
 }
 
-fn validate(state: &mut State, code: libc::c_int) -> bool {
-    if code == sys::LUA_OK {
-        return true;
-    } else if code == sys::LUA_ERRSYNTAX {
-        print!("\u{001b}[31;1msyntax error");
-    } else if code == sys::LUA_ERRMEM {
-        print!("\u{001b}[31;1mout of memory");
-    } else if code == sys::LUA_ERRGCMM {
-        print!("\u{001b}[31;1merror while running gc metamethod");
-    } else if code == sys::LUA_ERRRUN {
-        print!("\u{001b}[31;1mruntime error");
-    } else if code == sys::LUA_ERRERR {
-        print!("\u{001b}[31;1merror while running message handler");
+fn validate(thread: &mut Thread, res: LuaResult<()>) -> bool {
+    match res {
+        Ok(()) => return true,
+        Err(e) => print!("\u{001b}[31;1m{}", e),
     }
     unsafe {
-        let top = sys::lua_gettop(state.as_mut_ptr());
-        if sys::lua_isnone(state.as_mut_ptr(), top) == 0 {
-            let err = sys::lua_tostring(state.as_mut_ptr(), top);
+        let top = sys::lua_gettop(thread.as_raw_mut());
+        if sys::lua_isnone(thread.as_raw_mut(), top) == 0 {
+            let err = sys::lua_tostring(thread.as_raw_mut(), top);
             if !err.is_null() {
                 print!(": {}", std::ffi::CStr::from_ptr(err).to_string_lossy());
             }
@@ -60,8 +47,8 @@ fn validate(state: &mut State, code: libc::c_int) -> bool {
 }
 
 fn main() {
-    let mut state = State::default();
-    init_state(&mut state);
+    let mut thread = Thread::default();
+    init_thread(&mut thread);
     let stdin = io::stdin();
     let mut stdout = io::stdout();
     let mut prev_line = String::new();
@@ -84,7 +71,7 @@ fn main() {
             continue;
         }
         prev_line.clear();
-        run_line(&mut state, &line);
+        run_line(&mut thread, &line);
         print!(">>> ");
         stdout.flush().unwrap();
     }
