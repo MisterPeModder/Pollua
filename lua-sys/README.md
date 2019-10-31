@@ -17,7 +17,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-lua-sys = "^0.1.0"
+lua-sys = "^0.2.0"
 ```
 
 ## Crate Features
