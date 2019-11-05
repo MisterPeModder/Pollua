@@ -84,7 +84,14 @@ impl error::Error for Error {
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(error::Error::description(self))?;
+        f.write_str(match self.kind {
+            ErrorKind::Runtime => "runtime error",
+            ErrorKind::Syntax => "syntax error",
+            ErrorKind::OutOfMemory => "out of memory",
+            ErrorKind::MessageHandler => "error while running the message handler",
+            ErrorKind::GarbageCollection => "error while running a __gc metamethod",
+            ErrorKind::Io => "IO error",
+        })?;
         match &self.msg {
             Some(msg) => write!(f, ": {}", msg),
             None => Ok(()),
