@@ -2,7 +2,6 @@ extern crate pollua;
 
 use pollua::sys;
 use pollua::thread::LoadingMode;
-use pollua::Error;
 use pollua::LuaResult;
 use pollua::Thread;
 use std::io;
@@ -10,21 +9,19 @@ use std::io::prelude::*;
 
 fn init_thread(thread: &mut Thread) {
     unsafe {
-        sys::luaL_checkversion(thread.as_raw_mut());
-        sys::luaL_openlibs(thread.as_raw_mut());
+        sys::luaL_checkversion(thread.as_raw().as_ptr());
+        sys::luaL_openlibs(thread.as_raw().as_ptr());
     }
 }
 
 fn run_line(thread: &mut Thread, line: &str) {
     let res = thread.load_bytes(line, Some("<stdin>"), LoadingMode::Text);
+    let raw = thread.as_raw().as_ptr();
 
     if validate(thread, res) {
-        validate(
-            thread,
-            Error::from_code(unsafe {
-                sys::lua_pcall(thread.as_raw_mut(), 0, sys::LUA_MULTRET, 0)
-            }),
-        );
+        let code = unsafe { sys::lua_pcall(raw, 0, sys::LUA_MULTRET, 0) };
+        let err = thread.get_error(code);
+        validate(thread, err);
     }
 }
 
@@ -34,9 +31,9 @@ fn validate(thread: &mut Thread, res: LuaResult<()>) -> bool {
         Err(e) => print!("\u{001b}[31;1m{}", e),
     }
     unsafe {
-        let top = sys::lua_gettop(thread.as_raw_mut());
-        if sys::lua_isnone(thread.as_raw_mut(), top) == 0 {
-            let err = sys::lua_tostring(thread.as_raw_mut(), top);
+        let top = sys::lua_gettop(thread.as_raw().as_ptr());
+        if sys::lua_isnone(thread.as_raw().as_ptr(), top) == 0 {
+            let err = sys::lua_tostring(thread.as_raw().as_ptr(), top);
             if !err.is_null() {
                 print!(": {}", std::ffi::CStr::from_ptr(err).to_string_lossy());
             }
@@ -47,7 +44,7 @@ fn validate(thread: &mut Thread, res: LuaResult<()>) -> bool {
 }
 
 fn main() {
-    let mut thread = Thread::default();
+    let mut thread = Thread::new().expect("unable to crate Lua thread");
     init_thread(&mut thread);
     let stdin = io::stdin();
     let mut stdout = io::stdout();

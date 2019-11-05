@@ -12,6 +12,8 @@
 extern crate alloc;
 
 #[cfg(not(feature = "std"))]
+use alloc::string::String;
+#[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 
 extern crate libc;
@@ -23,6 +25,7 @@ use core::ptr;
 use std::error;
 
 pub mod thread;
+pub mod value;
 
 pub use thread::Thread;
 
@@ -39,7 +42,13 @@ pub fn lua_version() -> sys::lua_Number {
 
 /// The Lua error type
 #[derive(Debug)]
-pub enum Error {
+pub struct Error {
+    kind: ErrorKind,
+    msg: Option<String>,
+}
+
+#[derive(Debug)]
+pub enum ErrorKind {
     Runtime,
     Syntax,
     OutOfMemory,
@@ -49,41 +58,22 @@ pub enum Error {
 }
 
 impl Error {
-    pub fn from_code(code: i32) -> LuaResult<()> {
-        match code {
-            sys::LUA_ERRRUN => Err(Error::Runtime),
-            sys::LUA_ERRSYNTAX => Err(Error::Syntax),
-            sys::LUA_ERRMEM => Err(Error::OutOfMemory),
-            sys::LUA_ERRERR => Err(Error::MessageHandler),
-            sys::LUA_ERRGCMM => Err(Error::GarbageCollection),
-            sys::LUA_ERRFILE => Err(Error::Io),
-            _ => Ok(()),
-        }
-    }
-
-    pub fn get_code(res: LuaResult<()>) -> i32 {
-        (match res {
-            Ok(()) => sys::LUA_OK,
-            Err(Error::Runtime) => sys::LUA_ERRRUN,
-            Err(Error::Syntax) => sys::LUA_ERRSYNTAX,
-            Err(Error::OutOfMemory) => sys::LUA_ERRMEM,
-            Err(Error::MessageHandler) => sys::LUA_ERRERR,
-            Err(Error::GarbageCollection) => sys::LUA_ERRGCMM,
-            Err(Error::Io) => sys::LUA_ERRFILE,
-        }) as i32
+    #[inline]
+    fn new(kind: ErrorKind, msg: Option<String>) -> Error {
+        Error { kind, msg }
     }
 }
 
 #[cfg(feature = "std")]
 impl error::Error for Error {
     fn description(&self) -> &str {
-        match *self {
-            Error::Runtime => "runtime error",
-            Error::Syntax => "syntax error",
-            Error::OutOfMemory => "out of memory",
-            Error::MessageHandler => "error while running the message handler",
-            Error::GarbageCollection => "error while running a __gc metamethod",
-            Error::Io => "IO error",
+        match self.kind {
+            ErrorKind::Runtime => "runtime error",
+            ErrorKind::Syntax => "syntax error",
+            ErrorKind::OutOfMemory => "out of memory",
+            ErrorKind::MessageHandler => "error while running the message handler",
+            ErrorKind::GarbageCollection => "error while running a __gc metamethod",
+            ErrorKind::Io => "IO error",
         }
     }
 
@@ -94,13 +84,10 @@ impl error::Error for Error {
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Error::Runtime => write!(f, "runtime error"),
-            Error::Syntax => write!(f, "syntax error"),
-            Error::OutOfMemory => write!(f, "memory allocation error"),
-            Error::MessageHandler => write!(f, "error while running the message handler"),
-            Error::GarbageCollection => write!(f, "error while running a __gc metamethod"),
-            Error::Io => write!(f, "IO error"),
+        f.write_str(error::Error::description(self))?;
+        match &self.msg {
+            Some(msg) => write!(f, ": {}", msg),
+            None => Ok(()),
         }
     }
 }

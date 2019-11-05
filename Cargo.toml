@@ -14,6 +14,7 @@ libc = "^0.2.65"
 
 [dependencies.lua-sys]
 path = "lua-sys"
+version = "^0.2.0"
 default-features = false
 features = ["va-list"]
 
