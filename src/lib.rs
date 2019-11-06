@@ -24,6 +24,7 @@ use core::ptr;
 #[cfg(feature = "std")]
 use std::error;
 
+/// Lua thread API.
 pub mod thread;
 pub mod value;
 
@@ -40,14 +41,18 @@ pub fn lua_version() -> sys::lua_Number {
     unsafe { *sys::lua_version(ptr::null_mut()) }
 }
 
-/// The Lua error type
-#[derive(Debug)]
+/// The Lua error type.
+#[derive(Debug, Clone)]
 pub struct Error {
     kind: ErrorKind,
     msg: Option<String>,
 }
 
-#[derive(Debug)]
+/// A list specifying categories of Lua errors.
+/// It is used with the [`Error`] type.
+///
+/// [`Error`]: struct.Error.html
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum ErrorKind {
     Runtime,
     Syntax,
@@ -61,6 +66,18 @@ impl Error {
     #[inline]
     fn new(kind: ErrorKind, msg: Option<String>) -> Error {
         Error { kind, msg }
+    }
+
+    /// Returns the corresponding `ErrorKind` for this error.
+    #[inline]
+    pub fn kind(&self) -> ErrorKind {
+        self.kind
+    }
+
+    /// Returns the message associated with this error.
+    #[inline]
+    pub fn msg(&self) -> Option<&str> {
+        self.msg.as_ref().map(|m| &**m)
     }
 }
 
@@ -102,12 +119,16 @@ impl fmt::Display for Error {
 /// The Lua result type
 pub type LuaResult<T> = Result<T, Error>;
 
-// Returns a pointer to s is s is a valid c string,
-// otherwise copies to s to buf, removes nul bytes and adds the final nul byte.
+/// Returns a pointer to `s` if `s` is a valid c string,
+/// otherwise copies to `s` to `buf`, removes nul bytes and adds the final nul byte.
+#[inline(always)]
 fn cstr_buf<S: AsRef<[u8]>>(s: Option<S>, buf: &mut Vec<u8>) -> *mut libc::c_char {
+    cstr_buf_impl(s.as_ref().map(|s| s.as_ref()), buf)
+}
+
+fn cstr_buf_impl(s: Option<&[u8]>, buf: &mut Vec<u8>) -> *mut libc::c_char {
     match s {
         Some(s) => {
-            let s = s.as_ref();
             let nulb =
                 unsafe { libc::memchr(s.as_ptr() as *const libc::c_void, 0, s.len()) as usize };
             // check if the only nul byte is at the end
@@ -123,6 +144,7 @@ fn cstr_buf<S: AsRef<[u8]>>(s: Option<S>, buf: &mut Vec<u8>) -> *mut libc::c_cha
     }
 }
 
+/// Converts a byte slice to a c string without checking for nul characters in the string.
 #[inline]
 unsafe fn cstr_unchecked<S: AsRef<[u8]>>(s: Option<S>) -> *const libc::c_char {
     match s {

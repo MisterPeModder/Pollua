@@ -5,7 +5,9 @@ use ::alloc::alloc::{self, Layout};
 #[cfg(feature = "std")]
 use std::alloc::{self, Layout};
 
-use core::mem;
+use core::marker::PhantomData;
+use core::mem::{self, ManuallyDrop};
+use core::ops::{Deref, DerefMut};
 use core::ptr::NonNull;
 use core::slice;
 
@@ -102,7 +104,7 @@ impl Thread {
                             None
                         } else {
                             // s is garanteed to be a valid c string at this point.
-                            let buf = slice::from_raw_parts(s as *const u8, len - 1);
+                            let buf = slice::from_raw_parts(s as *const u8, len);
                             Some(String::from_utf8_lossy(buf).into_owned())
                         }
                     } else {
@@ -181,13 +183,36 @@ impl Thread {
         Thread { raw }
     }
 
+    /// Creates a `Thread` reference (of type [`ThreadRef`]) from a `lua_State` pointer.
+    ///
+    /// # Safety
+    /// Behavior is undefined if `raw` is invalid or muliple reference to this state co-exist.
+    ///
+    /// [`ThreadRef`]: struct.ThreadRef.html
+    #[inline]
+    pub unsafe fn ref_from_raw<'a>(raw: NonNull<sys::lua_State>) -> &'a mut Thread {
+        &mut *raw.cast::<Thread>().as_ptr()
+    }
+
+    /// Loads a Lua chunk without running it. If there are no errors,
+    /// `load_bytes` pushes the compiled chunk as a Lua function on top of the stack.
+    /// Otherwise, it returns an error.
+    #[inline(always)]
     pub fn load_bytes<B: AsRef<[u8]>>(
         &mut self,
         to_load: B,
         chunk_name: Option<&str>,
         mode: LoadingMode,
     ) -> LuaResult<()> {
-        let buffer = to_load.as_ref();
+        self.load_bytes_impl(to_load.as_ref(), chunk_name, mode)
+    }
+
+    fn load_bytes_impl(
+        &mut self,
+        buffer: &[u8],
+        chunk_name: Option<&str>,
+        mode: LoadingMode,
+    ) -> LuaResult<()> {
         let mut name_buf = Vec::new();
         unsafe {
             let code = sys::luaL_loadbufferx(
@@ -214,6 +239,9 @@ impl Drop for Thread {
     }
 }
 
+/// Used by the [`Thread::load_bytes`] method, describes how the bytes should be interpreted.
+///
+/// [`Thread::load_bytes`]: struct.Thread.html#method.load_bytes
 #[derive(Debug, Copy, Clone)]
 pub enum LoadingMode {
     Binary,
@@ -221,17 +249,64 @@ pub enum LoadingMode {
     Both,
 }
 
-// Default panic handler function
+/// A mutable reference to a [`Thread`].
+///
+/// [`Thread`]: struct.Thread.html
+pub struct ThreadRef<'a> {
+    // thread's destructor must never be called, as it would trigger a double-free.
+    thread: ManuallyDrop<Thread>,
+    _marker: PhantomData<&'a mut Thread>,
+}
+
+impl<'a> ThreadRef<'a> {
+    /// Creates a `ThreadRef` from a raw `lua_State` pointer.
+    ///
+    /// # Safety
+    /// Behavior is undefined if `raw` is invalid or multiple reference to this `lua_State` exists.
+    #[inline]
+    pub unsafe fn from_raw(raw: NonNull<sys::lua_State>) -> ThreadRef<'a> {
+        ThreadRef {
+            thread: ManuallyDrop::new(Thread::from_raw(raw)),
+            _marker: PhantomData,
+        }
+    }
+
+    /// Creates a `ThreadRef` from a [`Thread`] mutable reference.
+    ///
+    /// [`Thread`]: struct.Thread.html
+    #[inline]
+    pub fn from_ref(thread: &'a mut Thread) -> ThreadRef<'a> {
+        unsafe { ThreadRef::from_raw(thread.as_raw()) }
+    }
+}
+
+impl<'a> Deref for ThreadRef<'a> {
+    type Target = Thread;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        &self.thread
+    }
+}
+
+impl<'a> DerefMut for ThreadRef<'a> {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.thread
+    }
+}
+
+/// Default panic handler function.
 unsafe extern "C" fn at_panic_default(thread: *mut sys::lua_State) -> libc::c_int {
-    match Thread::from_raw(NonNull::new_unchecked(thread)).get_error(sys::LUA_ERRRUN) {
+    match Thread::ref_from_raw(NonNull::new_unchecked(thread)).get_error(sys::LUA_ERRRUN) {
         Ok(()) => 0,
         Err(Error { msg: None, .. }) => panic!("Lua panic: <no error message>"),
         Err(Error { msg: Some(m), .. }) => panic!("Lua panic: {}", m),
     }
 }
 
-// Default allocation function
-// It uses the liballoc functions instead of the one from libc.
+/// Default allocation function.
+/// Uses the liballoc functions instead of the one from libc.
 unsafe extern "C" fn alloc_default(
     _ud: *mut libc::c_void,
     ptr: *mut libc::c_void,
