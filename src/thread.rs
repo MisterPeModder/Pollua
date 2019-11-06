@@ -41,24 +41,13 @@ impl Thread {
     ///
     /// # Safety
     /// Behavior is undefined if `allocator` or `panic_handler` are invalid.
+    #[inline(always)]
     pub unsafe fn new_from<T>(
         allocator: sys::lua_Alloc,
         panic_handler: sys::lua_CFunction,
         userdata: *mut T,
     ) -> LuaResult<Thread> {
-        let mut thread = Thread {
-            raw: NonNull::new(match allocator {
-                Some(_) => sys::lua_newstate(allocator, userdata as *mut _),
-                None => sys::lua_newstate(Some(alloc_default), ptr::null_mut()),
-            })
-            .ok_or_else(|| Error::new(ErrorKind::OutOfMemory, None))?,
-        };
-        sys::lua_atpanic(
-            thread.raw.as_ptr(),
-            panic_handler.or(Some(at_panic_default)),
-        );
-        thread.check_version()?;
-        Ok(thread)
+        Thread::new_from_impl(allocator, panic_handler, userdata as *mut _)
     }
 
     /// Checks whether the core running the call, the core that created the Lua state,
@@ -206,6 +195,29 @@ impl Thread {
     ) -> LuaResult<()> {
         self.load_bytes_impl(to_load.as_ref(), chunk_name, mode)
     }
+}
+
+// Method impls
+impl Thread {
+    pub unsafe fn new_from_impl(
+        allocator: sys::lua_Alloc,
+        panic_handler: sys::lua_CFunction,
+        userdata: *mut libc::c_void,
+    ) -> LuaResult<Thread> {
+        let mut thread = Thread {
+            raw: NonNull::new(match allocator {
+                Some(_) => sys::lua_newstate(allocator, userdata),
+                None => sys::lua_newstate(Some(alloc_default), ptr::null_mut()),
+            })
+            .ok_or_else(|| Error::new(ErrorKind::OutOfMemory, None))?,
+        };
+        sys::lua_atpanic(
+            thread.raw.as_ptr(),
+            panic_handler.or(Some(at_panic_default)),
+        );
+        thread.check_version()?;
+        Ok(thread)
+    }
 
     fn load_bytes_impl(
         &mut self,
@@ -217,10 +229,10 @@ impl Thread {
         unsafe {
             let code = sys::luaL_loadbufferx(
                 self.as_raw().as_ptr(),
-                crate::cstr_unchecked(Some(buffer)),
+                util::cstr_unchecked(Some(buffer)),
                 buffer.len(),
-                crate::cstr_buf(chunk_name, &mut name_buf),
-                crate::cstr_unchecked(Some(match mode {
+                util::cstr_buf(chunk_name, &mut name_buf),
+                util::cstr_unchecked(Some(match mode {
                     LoadingMode::Binary => "b\0",
                     LoadingMode::Text => "t\0",
                     LoadingMode::Both => "bt\0",
