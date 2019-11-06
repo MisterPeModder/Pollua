@@ -8,39 +8,24 @@ use std::io;
 use std::io::prelude::*;
 
 fn init_thread(thread: &mut Thread) {
-    unsafe {
-        sys::luaL_checkversion(thread.as_raw().as_ptr());
-        sys::luaL_openlibs(thread.as_raw().as_ptr());
-    }
+    unsafe { sys::luaL_openlibs(thread.as_raw().as_ptr()) };
 }
 
 fn run_line(thread: &mut Thread, line: &str) {
-    let res = thread.load_bytes(line, Some("<stdin>"), LoadingMode::Text);
-    let raw = thread.as_raw().as_ptr();
-
-    if validate(thread, res) {
-        let code = unsafe { sys::lua_pcall(raw, 0, sys::LUA_MULTRET, 0) };
-        let err = thread.get_error(code);
-        validate(thread, err);
+    if validate(thread.load_bytes(line, Some("<stdin>"), LoadingMode::Text)) {
+        let code = unsafe { sys::lua_pcall(thread.as_raw().as_ptr(), 0, sys::LUA_MULTRET, 0) };
+        validate(thread.get_error(code));
     }
 }
 
-fn validate(thread: &mut Thread, res: LuaResult<()>) -> bool {
+fn validate(res: LuaResult<()>) -> bool {
     match res {
-        Ok(()) => return true,
-        Err(e) => print!("\u{001b}[31;1m{}", e),
-    }
-    unsafe {
-        let top = sys::lua_gettop(thread.as_raw().as_ptr());
-        if sys::lua_isnone(thread.as_raw().as_ptr(), top) == 0 {
-            let err = sys::lua_tostring(thread.as_raw().as_ptr(), top);
-            if !err.is_null() {
-                print!(": {}", std::ffi::CStr::from_ptr(err).to_string_lossy());
-            }
+        Ok(()) => true,
+        Err(e) => {
+            println!("\u{001b}[31;1m{}\u{001b}[0m", e);
+            false
         }
     }
-    println!("\u{001b}[0m");
-    false
 }
 
 fn main() {
