@@ -1,4 +1,4 @@
-use core::ptr;
+use crate::*;
 
 /// Returns a pointer to `s` if `s` is a valid c string,
 /// otherwise copies to `s` to `buf`, removes nul bytes and adds the final nul byte.
