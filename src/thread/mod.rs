@@ -11,6 +11,10 @@ use core::ops::{Deref, DerefMut};
 use core::ptr::NonNull;
 use core::slice;
 
+mod call;
+
+pub use call::*;
+
 /// Lua thread (state) wrapper.
 #[derive(Debug)]
 pub struct Thread {
@@ -183,23 +187,50 @@ impl Thread {
         &mut *raw.cast::<Thread>().as_ptr()
     }
 
-    /// Loads a Lua chunk without running it. If there are no errors,
-    /// `load_bytes` pushes the compiled chunk as a Lua function on top of the stack.
-    /// Otherwise, it returns an error.
+    /// Loads a Lua chunk and creates a [`Caller`] for it if there were no errors.
+    /// The resulting [`Caller`] takes no argmuents and returns nothing.
+    ///
+    /// [`Caller`]: struct.Caller.html
     #[inline(always)]
-    pub fn load_bytes<B: AsRef<[u8]>>(
-        &mut self,
+    pub fn caller_load<'a, B: AsRef<[u8]>>(
+        &'a mut self,
         to_load: B,
         chunk_name: Option<&str>,
         mode: LoadingMode,
-    ) -> LuaResult<()> {
-        self.load_bytes_impl(to_load.as_ref(), chunk_name, mode)
+    ) -> LuaResult<Caller<'a>> {
+        self.caller_load_impl(to_load.as_ref(), chunk_name, mode)
+    }
+
+    /// Creates a [`Caller`] for the given global function name.
+    /// Returns `None` if `_G.[name]` is not defined or is not a function.alloc
+    ///
+    /// [`Caller`]: struct.Caller.html
+    #[inline(always)]
+    pub fn caller_global<S: AsRef<[u8]>>(&mut self, name: S) -> Option<Caller> {
+        Caller::from_global(ThreadRef::from_ref(self), name.as_ref())
+    }
+
+    /// Creates a [`Caller`] for the function located at the top of the stack.
+    ///
+    /// # Safety
+    /// Behavior is undefined if the value at the top of the stack is not a function.
+    ///
+    /// [`Caller`]: struct.Caller.html
+    #[inline(always)]
+    pub(crate) unsafe fn caller_stack_unchecked(&mut self) -> Caller {
+        Caller::from_stack_unchecked(ThreadRef::from_ref(self))
+    }
+
+    /// Similar to `lua_getglobal`, but accepts any string.
+    #[inline(always)]
+    fn push_global<S: AsRef<[u8]>>(&mut self, name: S) -> libc::c_int {
+        self.push_global_impl(name.as_ref())
     }
 }
 
 // Method impls
 impl Thread {
-    pub unsafe fn new_from_impl(
+    unsafe fn new_from_impl(
         allocator: sys::lua_Alloc,
         panic_handler: sys::lua_CFunction,
         userdata: *mut libc::c_void,
@@ -219,12 +250,12 @@ impl Thread {
         Ok(thread)
     }
 
-    fn load_bytes_impl(
-        &mut self,
+    fn caller_load_impl<'a>(
+        &'a mut self,
         buffer: &[u8],
         chunk_name: Option<&str>,
         mode: LoadingMode,
-    ) -> LuaResult<()> {
+    ) -> LuaResult<Caller<'a>> {
         let mut name_buf = Vec::new();
         unsafe {
             let code = sys::luaL_loadbufferx(
@@ -235,10 +266,28 @@ impl Thread {
                 util::cstr_unchecked(Some(match mode {
                     LoadingMode::Binary => "b\0",
                     LoadingMode::Text => "t\0",
-                    LoadingMode::Both => "bt\0",
+                    LoadingMode::Auto => "bt\0",
                 })),
             );
-            self.get_error(code)
+            match self.get_error(code) {
+                Ok(()) => Ok(self.caller_stack_unchecked()),
+                Err(e) => Err(e),
+            }
+        }
+    }
+
+    fn push_global_impl(&mut self, name: &[u8]) -> libc::c_int {
+        unsafe {
+            let ptr = self.raw.as_ptr();
+            // push the global env onto the stack
+            sys::lua_rawgeti(ptr, sys::LUA_REGISTRYINDEX, sys::LUA_RIDX_GLOBALS);
+            // push the global variable name onto the stack
+            sys::lua_pushlstring(ptr, name.as_ptr() as *const libc::c_char, name.len());
+            // fetch _G[name]
+            let value_type = sys::lua_rawget(ptr, -2);
+            // remove the global env from the stack
+            sys::lua_replace(ptr, -2);
+            value_type
         }
     }
 }
@@ -258,7 +307,7 @@ impl Drop for Thread {
 pub enum LoadingMode {
     Binary,
     Text,
-    Both,
+    Auto,
 }
 
 /// A mutable reference to a [`Thread`].
@@ -289,6 +338,13 @@ impl<'a> ThreadRef<'a> {
     #[inline]
     pub fn from_ref(thread: &'a mut Thread) -> ThreadRef<'a> {
         unsafe { ThreadRef::from_raw(thread.as_raw()) }
+    }
+}
+
+impl fmt::Debug for ThreadRef<'_> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.thread.fmt(f)
     }
 }
 
@@ -336,5 +392,42 @@ unsafe extern "C" fn alloc_default(
             Layout::from_size_align_unchecked(osize, 1),
             nsize,
         ) as *mut _
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    fn stack_top(thread: &mut Thread) -> libc::c_int {
+        unsafe { sys::lua_gettop(thread.as_raw().as_ptr()) }
+    }
+
+    fn type_at(thread: &mut Thread, index: libc::c_int) -> libc::c_int {
+        unsafe { sys::lua_type(thread.as_raw().as_ptr(), index) }
+    }
+
+    #[test]
+    fn test_thread_push_global() {
+        let mut thread = Thread::new().unwrap();
+        let mut top;
+        top = stack_top(&mut thread);
+        thread.push_global("undef_var");
+        assert_eq!(type_at(&mut thread, -1), sys::LUA_TNIL);
+        assert_eq!(stack_top(&mut thread), top + 1);
+
+        unsafe {
+            sys::lua_pushinteger(thread.as_raw().as_ptr(), 42);
+            sys::lua_setglobal(thread.as_raw().as_ptr(), b"num_var\0".as_ptr() as *const _);
+        }
+        top = stack_top(&mut thread);
+        thread.push_global("num_var");
+        assert_eq!(type_at(&mut thread, -1), sys::LUA_TNUMBER);
+        assert!(unsafe { sys::lua_isinteger(thread.as_raw().as_ptr(), -1) } != 0);
+        assert_eq!(
+            unsafe { sys::lua_tointeger(thread.as_raw().as_ptr(), -1) },
+            42
+        );
+        assert_eq!(stack_top(&mut thread), top + 1);
     }
 }
