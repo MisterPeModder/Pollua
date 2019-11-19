@@ -26,6 +26,9 @@ fn cstr_buf_impl(s: Option<&[u8]>, buf: &mut Vec<u8>) -> *mut libc::c_char {
 }
 
 /// Converts a byte slice to a c string without checking for nul characters in the string.
+///
+/// # Safety
+/// The function does not check for null bytes
 #[inline]
 pub unsafe fn cstr_unchecked<S: AsRef<[u8]>>(s: Option<S>) -> *const libc::c_char {
     match s {
