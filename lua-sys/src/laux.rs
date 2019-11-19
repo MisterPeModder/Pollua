@@ -103,11 +103,7 @@ extern "C" {
     pub fn luaL_addlstring(B: *mut luaL_Buffer, s: *const libc::c_char, l: usize);
     pub fn luaL_addstring(B: *mut luaL_Buffer, s: *const libc::c_char);
     pub fn luaL_addvalue(B: *mut luaL_Buffer);
-    pub fn luaL_argerror(
-        L: *mut lua_State,
-        arg: libc::c_int,
-        extramsg: *const libc::c_char,
-    ) -> libc::c_int;
+    pub fn luaL_argerror(L: *mut lua_State, arg: libc::c_int, extramsg: *const libc::c_char) -> !;
     pub fn luaL_buffinit(L: *mut lua_State, B: *mut luaL_Buffer);
 
     // Introduced in Lua 5.2
@@ -153,7 +149,7 @@ extern "C" {
     pub fn luaL_checkunsigned(L: *mut lua_State, arg: libc::c_int) -> lua_Unsigned;
 
     fn luaL_checkversion_(L: *mut lua_State, ver: lua_Number, sz: usize);
-    pub fn luaL_error(L: *mut lua_State, fmt: *const libc::c_char, ...) -> libc::c_int;
+    pub fn luaL_error(L: *mut lua_State, fmt: *const libc::c_char, ...) -> !;
 
     // Introduced in Lua 5.2
     #[cfg(LUA_VERSION = "5.2")]
@@ -325,11 +321,7 @@ extern "C" {
 
     // Removed in Lua 5.2
     #[cfg(all(LUA_VERSION = "5.1", not(LUA_VERSION = "5.2")))]
-    pub fn luaL_typerror(
-        L: *mut lua_State,
-        narg: libc::c_int,
-        tname: *const libc::c_char,
-    ) -> libc::c_int;
+    pub fn luaL_typerror(L: *mut lua_State, narg: libc::c_int, tname: *const libc::c_char) -> !;
 
     pub fn luaL_unref(L: *mut lua_State, t: libc::c_int, ref_: libc::c_int);
     pub fn luaL_where(L: *mut lua_State, lvl: libc::c_int);

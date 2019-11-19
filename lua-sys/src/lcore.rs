@@ -229,7 +229,7 @@ extern "C" {
     #[cfg(all(LUA_VERSION = "5.0", not(LUA_VERSION = "5.2")))]
     pub fn lua_equal(L: *mut lua_State, idx1: libc::c_int, idx2: libc::c_int) -> libc::c_int;
 
-    pub fn lua_error(L: *mut lua_State) -> libc::c_int;
+    pub fn lua_error(L: *mut lua_State) -> !;
     pub fn lua_gc(L: *mut lua_State, what: libc::c_int, data: libc::c_int) -> libc::c_int;
     pub fn lua_getallocf(L: *mut lua_State, ud: *mut *mut libc::c_void) -> lua_Alloc;
 
