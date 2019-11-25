@@ -3,7 +3,7 @@ use crate::{
     value::{Pushable, Pusher, ValueType},
     LuaResult,
 };
-use core::{
+use std::{
     cell::UnsafeCell,
     iter::{DoubleEndedIterator, FusedIterator},
     ops::Index,
@@ -300,7 +300,7 @@ impl FusedIterator for Iter<'_, '_> {}
 mod test {
     use super::*;
     use crate::{value::LuaNil, ErrorKind};
-    use core::mem;
+    use std::mem;
 
     fn stack_top(thread: &mut Thread) -> libc::c_int {
         unsafe { sys::lua_gettop(thread.as_raw().as_ptr()) }

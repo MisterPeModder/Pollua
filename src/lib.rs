@@ -1,26 +1,11 @@
 //! High level bindings to Lua 5.3
-//!
-//! # no_std support
-//!
-//! By default, `pollua` depends on `libstd`. However, it can be configured to use the unstable
-//! `liballoc` API instead.
-//! This configuration is currently unstable and is not guaranteed to work on all versions of Rust.
-
-#![cfg_attr(not(feature = "std"), no_std)]
-
-#[cfg(not(feature = "std"))]
-extern crate alloc;
-
-#[cfg(not(feature = "std"))]
-use alloc::string::String;
 
 extern crate libc;
 pub extern crate lua_sys as sys;
 
-use core::fmt;
-use core::ptr;
-#[cfg(feature = "std")]
+use std::ptr;
 use std::error;
+use std::fmt;
 
 /// Lua thread API.
 pub mod thread;
@@ -82,7 +67,6 @@ impl Error {
     }
 }
 
-#[cfg(feature = "std")]
 impl error::Error for Error {
     fn description(&self) -> &str {
         match self.kind {

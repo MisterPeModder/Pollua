@@ -1,22 +1,17 @@
 use crate::thread::{Thread, ThreadRef};
 
-use core::{
+use std::{
     ascii,
+    borrow::Cow,
     cmp::Ordering,
     fmt::{self, Pointer, Write},
     iter::{Product, Sum},
+    num::ParseFloatError,
     ops::*,
+    panic::{RefUnwindSafe, UnwindSafe},
     ptr::{self, NonNull},
     slice,
     str::{self, FromStr, Utf8Error},
-};
-
-#[cfg(not(feature = "std"))]
-use ::alloc::{borrow::Cow, string::String, vec::Vec};
-#[cfg(feature = "std")]
-use std::{
-    borrow::Cow,
-    panic::{RefUnwindSafe, UnwindSafe},
 };
 
 /// Lua value type.
@@ -201,7 +196,8 @@ impl Into<f64> for LuaNumber {
 }
 
 impl FromStr for LuaNumber {
-    type Err = core::num::ParseFloatError;
+    type Err = ParseFloatError;
+
     #[inline]
     fn from_str(src: &str) -> Result<LuaNumber, Self::Err> {
         Ok(LuaNumber {
@@ -628,7 +624,6 @@ impl<T: ?Sized> Pointer for LightUserdata<T> {
     }
 }
 
-#[cfg(feature = "std")]
 impl<T: RefUnwindSafe + ?Sized> UnwindSafe for LightUserdata<T> {}
 
 impl<T: ?Sized> From<NonNull<T>> for LightUserdata<T> {

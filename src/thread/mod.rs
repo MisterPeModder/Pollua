@@ -1,13 +1,7 @@
 use crate::{util, Error, ErrorKind, LuaResult};
-#[cfg(not(feature = "std"))]
-use ::alloc::{string::String, vec::Vec};
 
-#[cfg(not(feature = "std"))]
-use ::alloc::alloc::{self, Layout};
-#[cfg(feature = "std")]
-use std::alloc::{self, Layout};
-
-use core::{
+use std::{
+    alloc::{self, Layout},
     fmt,
     marker::PhantomData,
     mem::{self, ManuallyDrop},

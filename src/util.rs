@@ -1,7 +1,4 @@
-use core::ptr;
-
-#[cfg(not(feature = "std"))]
-use ::alloc::vec::Vec;
+use std::{iter, ptr};
 
 /// Returns a pointer to `s` if `s` is a valid c string,
 /// otherwise copies to `s` to `buf`, removes nul bytes and adds the final nul byte.
@@ -20,7 +17,7 @@ fn cstr_buf_impl(s: Option<&[u8]>, buf: &mut Vec<u8>) -> *mut libc::c_char {
                 s.as_ptr()
             } else {
                 buf.clear();
-                buf.extend(s.iter().filter(|&&b| b != 0).chain(core::iter::once(&0u8)));
+                buf.extend(s.iter().filter(|&&b| b != 0).chain(iter::once(&0u8)));
                 buf.as_mut_ptr()
             }) as *mut libc::c_char
         }
