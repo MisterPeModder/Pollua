@@ -13,8 +13,6 @@ extern crate alloc;
 
 #[cfg(not(feature = "std"))]
 use alloc::string::String;
-#[cfg(not(feature = "std"))]
-use alloc::vec::Vec;
 
 extern crate libc;
 pub extern crate lua_sys as sys;

@@ -39,7 +39,7 @@ fn main() {
 
         // run the line and check for errors
         if let Err(e) = thread
-            .caller_load(line, Some("<stdin>"), LoadingMode::Text)
+            .caller_load(&line, Some("<stdin>"), LoadingMode::Text)
             .and_then(|c| c.call())
         {
             println!("\u{001b}[31;1m{}\u{001b}[0m", e);

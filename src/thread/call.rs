@@ -1,9 +1,13 @@
-use super::*;
-
-use crate::value::ValueType;
-use core::cell::UnsafeCell;
-use core::iter::{DoubleEndedIterator, FusedIterator};
-use core::ops::Index;
+use crate::{
+    thread::{Thread, ThreadRef},
+    value::{Pushable, Pusher, ValueType},
+    LuaResult,
+};
+use core::{
+    cell::UnsafeCell,
+    iter::{DoubleEndedIterator, FusedIterator},
+    ops::Index,
+};
 
 /// Used to call Lua functions.
 /// Created by the [`caller_*`] methods on [`Thread`].
@@ -33,12 +37,20 @@ impl<'a> Caller<'a> {
     ///
     /// # Safety
     /// Behavior is undefined if the value at the top of the stack is not a function.
+    #[inline]
     pub(crate) unsafe fn from_stack_unchecked(mut thread: ThreadRef) -> Caller {
         debug_assert_eq!(
             sys::lua_type(thread.as_raw().as_ptr(), -1),
             sys::LUA_TFUNCTION
         );
         Caller { thread, nargs: 0 }
+    }
+
+    #[inline]
+    pub fn arg<A: Pushable>(mut self, arg: A) -> Caller<'a> {
+        unsafe { arg.push(Pusher(ThreadRef::from_raw(self.thread.as_raw()))) }
+        self.nargs += 1;
+        self
     }
 
     /// Executes the call, consuming the `Caller`.
@@ -287,6 +299,8 @@ impl FusedIterator for Iter<'_, '_> {}
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::{value::LuaNil, ErrorKind};
+    use core::mem;
 
     fn stack_top(thread: &mut Thread) -> libc::c_int {
         unsafe { sys::lua_gettop(thread.as_raw().as_ptr()) }
@@ -429,5 +443,79 @@ mod test {
             .call()
             .unwrap_err();
         assert_eq!(err.kind(), ErrorKind::Runtime);
+    }
+
+    #[test]
+    fn test_call_sum() {
+        unsafe extern "C" fn test_sum(l: *mut sys::lua_State) -> libc::c_int {
+            let mut sum = 0.0;
+            let nargs = match sys::lua_gettop(l) {
+                n if n == 0 => sys::lua_error(l),
+                n => n,
+            };
+            for i in 1..=nargs {
+                sum += sys::luaL_checknumber(l, i);
+            }
+            sys::lua_pushnumber(l, sum);
+            1
+        }
+
+        let mut thread = Thread::new().unwrap();
+        let top = stack_top(&mut thread);
+        unsafe {
+            sys::lua_register(
+                thread.as_raw().as_ptr(),
+                b"test_sum\0".as_ptr() as *const _,
+                Some(test_sum),
+            );
+        }
+
+        {
+            let err = thread
+                .caller_global("test_sum")
+                .unwrap()
+                .call()
+                .unwrap_err();
+            assert_eq!(err.kind(), ErrorKind::Runtime);
+        }
+        assert_eq!(stack_top(&mut thread), top);
+
+        {
+            let err = thread
+                .caller_global("test_sum")
+                .unwrap()
+                .arg(42.0)
+                .arg(LuaNil)
+                .call()
+                .unwrap_err();
+            assert_eq!(err.kind(), ErrorKind::Runtime);
+        }
+        assert_eq!(stack_top(&mut thread), top);
+
+        {
+            let return_values = thread
+                .caller_global("test_sum")
+                .unwrap()
+                .arg(1.0f64)
+                .arg(2.0f64)
+                .call()
+                .unwrap();
+            assert_eq!(return_values.get(0), Some(ValueType::Number));
+            assert_eq!(return_values.get(1), None);
+        }
+        assert_eq!(stack_top(&mut thread), top);
+        {
+            let return_values = thread
+                .caller_global("test_sum")
+                .unwrap()
+                .arg(-2.0f64)
+                .arg("24")
+                .arg(7.2f64)
+                .call()
+                .unwrap();
+            assert_eq!(return_values.get(0), Some(ValueType::Number));
+            assert_eq!(return_values.get(1), None);
+        }
+        assert_eq!(stack_top(&mut thread), top);
     }
 }

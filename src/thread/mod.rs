@@ -1,15 +1,20 @@
-use crate::*;
+use crate::{util, Error, ErrorKind, LuaResult};
+#[cfg(not(feature = "std"))]
+use ::alloc::{string::String, vec::Vec};
 
 #[cfg(not(feature = "std"))]
 use ::alloc::alloc::{self, Layout};
 #[cfg(feature = "std")]
 use std::alloc::{self, Layout};
 
-use core::marker::PhantomData;
-use core::mem::{self, ManuallyDrop};
-use core::ops::{Deref, DerefMut};
-use core::ptr::NonNull;
-use core::slice;
+use core::{
+    fmt,
+    marker::PhantomData,
+    mem::{self, ManuallyDrop},
+    ops::{Deref, DerefMut},
+    ptr::{self, NonNull},
+    slice,
+};
 
 mod call;
 
@@ -192,9 +197,9 @@ impl Thread {
     ///
     /// [`Caller`]: struct.Caller.html
     #[inline(always)]
-    pub fn caller_load<'a, B: AsRef<[u8]>>(
+    pub fn caller_load<'a, B: AsRef<[u8]> + ?Sized>(
         &'a mut self,
-        to_load: B,
+        to_load: &B,
         chunk_name: Option<&str>,
         mode: LoadingMode,
     ) -> LuaResult<Caller<'a>> {
@@ -206,7 +211,7 @@ impl Thread {
     ///
     /// [`Caller`]: struct.Caller.html
     #[inline(always)]
-    pub fn caller_global<S: AsRef<[u8]>>(&mut self, name: S) -> Option<Caller> {
+    pub fn caller_global<S: AsRef<[u8]> + ?Sized>(&mut self, name: &S) -> Option<Caller> {
         Caller::from_global(ThreadRef::from_ref(self), name.as_ref())
     }
 
@@ -223,7 +228,7 @@ impl Thread {
 
     /// Similar to `lua_getglobal`, but accepts any string.
     #[inline(always)]
-    fn push_global<S: AsRef<[u8]>>(&mut self, name: S) -> libc::c_int {
+    fn push_global<S: AsRef<[u8]> + ?Sized>(&mut self, name: &S) -> libc::c_int {
         self.push_global_impl(name.as_ref())
     }
 }

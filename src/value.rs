@@ -1,8 +1,23 @@
-use crate::*;
+use crate::thread::{Thread, ThreadRef};
 
-use core::iter::{Product, Sum};
-use core::ops::*;
-use core::str::FromStr;
+use core::{
+    ascii,
+    cmp::Ordering,
+    fmt::{self, Pointer, Write},
+    iter::{Product, Sum},
+    ops::*,
+    ptr::{self, NonNull},
+    slice,
+    str::{self, FromStr, Utf8Error},
+};
+
+#[cfg(not(feature = "std"))]
+use ::alloc::{borrow::Cow, string::String, vec::Vec};
+#[cfg(feature = "std")]
+use std::{
+    borrow::Cow,
+    panic::{RefUnwindSafe, UnwindSafe},
+};
 
 /// Lua value type.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -61,8 +76,6 @@ impl ValueType {
 pub trait Value: Sized + private::Sealed {
     /// Returns the type of this value.
     fn value_type() -> ValueType;
-    /// Pushes the value onto the stack.
-    fn push(self, thread: &mut Thread);
     /// Gets the value at the top of the stack without checking the type of the top value.
     ///
     /// # Safety
@@ -84,6 +97,21 @@ pub trait Value: Sized + private::Sealed {
     }
 }
 
+/// Pushes a value onto the stack
+pub struct Pusher<'a>(pub(crate) ThreadRef<'a>);
+
+impl Pusher<'_> {
+    #[inline]
+    pub fn push<V: Pushable>(self, value: &V) {
+        value.push(self);
+    }
+}
+
+/// A trait for values that can be pushed onto the stack.
+pub trait Pushable {
+    fn push(&self, pusher: Pusher);
+}
+
 /// A Lua floating-point number.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct LuaNumber {
@@ -94,10 +122,6 @@ impl Value for LuaNumber {
     #[inline(always)]
     fn value_type() -> ValueType {
         ValueType::Number
-    }
-
-    fn push(self, thread: &mut Thread) {
-        unsafe { sys::lua_pushnumber(thread.as_raw().as_ptr(), self.value) }
     }
 
     unsafe fn get_unchecked(thread: &mut Thread) -> LuaNumber {
@@ -274,9 +298,351 @@ macro_rules! number_sum {
 number_sum!(LuaNumber, Product, product, sys::lua_Number);
 number_sum!(LuaNumber, Sum, sum, sys::lua_Number);
 
+impl Pushable for LuaNumber {
+    #[inline]
+    fn push(&self, mut pusher: Pusher) {
+        unsafe { sys::lua_pushnumber(pusher.0.as_raw().as_mut(), self.value) }
+    }
+}
+
+macro_rules! lua_number_pushable_impl {
+    ($type:ty) => {
+        impl Pushable for $type {
+            #[inline]
+            fn push(&self, pusher: Pusher) {
+                LuaNumber::from(*self).push(pusher)
+            }
+        }
+    };
+}
+
+lua_number_pushable_impl!(f32);
+lua_number_pushable_impl!(f64);
+
+/// The Lua `nil` value.
+#[derive(Default, Debug, Copy, Clone, PartialEq, Eq)]
+pub struct LuaNil;
+
+impl fmt::Display for LuaNil {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("nil")
+    }
+}
+
+impl Value for LuaNil {
+    fn value_type() -> ValueType {
+        ValueType::Nil
+    }
+
+    unsafe fn get_unchecked(thread: &mut Thread) -> LuaNil {
+        sys::lua_pop(thread.as_raw().as_ptr(), 1);
+        LuaNil
+    }
+}
+
+impl Pushable for LuaNil {
+    #[inline]
+    fn push(&self, mut pusher: Pusher) {
+        unsafe { sys::lua_pushnil(pusher.0.as_raw().as_ptr()) }
+    }
+}
+
+#[repr(transparent)]
+struct LuaStrRepr([u8]);
+
+/// Representation of a borrowed Lua String.
+/// It can be constructed safely from a `&[u8]` slice, or unsafely from a raw `*const u8`.
+pub struct LuaStr {
+    repr: LuaStrRepr,
+}
+
+impl LuaStr {
+    /// Wraps a raw pointer with a safe Lua string wrapper.
+    ///
+    /// This function will wrap the provided `ptr` with a `LuaStr` wrapper, which
+    /// allows inspection and interoperation of non-owned Lua strings. The total
+    /// size of the raw Lua string must be smaller than `isize::MAX` **bytes**
+    /// in memory due to calling the `slice::from_raw_parts` function.
+    ///
+    /// # Safety
+    /// This method is unsafe for a number of reasons:
+    ///
+    /// * There is no guarantee to the validity of `ptr`.
+    /// * The returned lifetime is not guaranteed to be the actual lifetime of
+    ///   `ptr`.
+    /// * It is not guaranteed that the memory pointed by `ptr` won't change
+    ///   before the `LuaStr` has been destroyed.
+    #[inline]
+    pub unsafe fn from_ptr<'a>(ptr: *const u8, len: usize) -> &'a LuaStr {
+        LuaStr::from_bytes(slice::from_raw_parts(ptr, len))
+    }
+
+    /// Creates a Lua string wrapper from a byte slice.
+    #[inline(always)]
+    pub fn from_bytes<B: AsRef<[u8]> + ?Sized>(bytes: &B) -> &LuaStr {
+        LuaStr::from_bytes_impl(bytes.as_ref())
+    }
+
+    #[inline]
+    fn from_bytes_impl(bytes: &[u8]) -> &LuaStr {
+        unsafe { &*(bytes as *const [u8] as *const LuaStr) }
+    }
+
+    /// Converts this Lua string to a byte slice.
+    #[inline]
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.repr.0
+    }
+
+    /// Yields a &str slice if the `LuaStr` contains valid UTF-8.
+    ///
+    /// If the contents of the `LuaStr` are valid UTF-8 data, this
+    /// function will return the corresponding &str slice. Otherwise,
+    /// it will return an error with details of where UTF-8 validation failed.
+    ///
+    /// > **Note**: This method is currently implemented to check for validity
+    /// > after a constant-time cast, but it is planned to alter its definition
+    /// > in the future to perform the length calculation in addition to the
+    /// > UTF-8 check whenever this method is called.
+    #[inline]
+    pub fn to_str(&self) -> Result<&str, Utf8Error> {
+        str::from_utf8(self.as_bytes())
+    }
+
+    /// Converts a `LuaStr` into a [`Cow`]`<`[`str`]`>`.
+    ///
+    /// If the contents of the `LuaStr` are valid UTF-8 data, this
+    /// function will return a [`Cow`]`::`[`Borrowed`]`(`&str`)`
+    /// with the corresponding &str slice. Otherwise, it will
+    /// replace any invalid UTF-8 sequences with
+    /// [`U+FFFD REPLACEMENT CHARACTER`][U+FFFD] and return a
+    /// [`Cow`]`::`[`Owned`]`(`[`String`]`)` with the result.
+    ///
+    /// [`Cow`]: std::borrow::Cow
+    /// [`Borrowed`]: std::borrow::Cow::Borrowed
+    /// [`Owned`]: std::borrow::Cow::Owned
+    /// [`String`]: std::string::String
+    /// [U+FFFD]: std::char::REPLACEMENT_CHARACTER
+    #[inline]
+    pub fn to_string_lossy(&self) -> Cow<str> {
+        String::from_utf8_lossy(self.as_bytes())
+    }
+}
+
+impl fmt::Debug for LuaStr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "\"")?;
+        for byte in self
+            .as_bytes()
+            .iter()
+            .flat_map(|&b| ascii::escape_default(b))
+        {
+            f.write_char(byte as char)?;
+        }
+        write!(f, "\"")
+    }
+}
+
+impl fmt::Display for LuaStr {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(self, f)
+    }
+}
+
+impl AsRef<[u8]> for LuaStr {
+    #[inline]
+    fn as_ref(&self) -> &[u8] {
+        &self.repr.0
+    }
+}
+
+impl Default for &LuaStr {
+    fn default() -> &'static LuaStr {
+        const EMPTY: &[u8] = &[];
+        LuaStr::from_bytes(EMPTY)
+    }
+}
+
+impl PartialEq for LuaStr {
+    #[inline]
+    fn eq(&self, other: &LuaStr) -> bool {
+        self.as_bytes().eq(other.as_bytes())
+    }
+}
+
+impl Eq for LuaStr {}
+
+impl PartialOrd for LuaStr {
+    #[inline]
+    fn partial_cmp(&self, other: &LuaStr) -> Option<Ordering> {
+        self.as_bytes().partial_cmp(&other.as_bytes())
+    }
+}
+
+impl Ord for LuaStr {
+    #[inline]
+    fn cmp(&self, other: &LuaStr) -> Ordering {
+        self.as_bytes().cmp(&other.as_bytes())
+    }
+}
+
+impl<'a> Pushable for &'a LuaStr {
+    #[inline]
+    fn push(&self, mut pusher: Pusher) {
+        unsafe {
+            sys::lua_pushlstring(
+                pusher.0.as_raw().as_ptr(),
+                self.repr.0.as_ptr() as *const libc::c_char,
+                self.repr.0.len(),
+            );
+        }
+    }
+}
+
+macro_rules! luastr_push_impl {
+    ($type:ty) => {
+        impl Pushable for $type {
+            #[inline]
+            fn push(&self, pusher: Pusher) {
+                LuaStr::from_bytes(self).push(pusher)
+            }
+        }
+    };
+}
+
+luastr_push_impl!(&'_ [u8]);
+luastr_push_impl!(&'_ str);
+luastr_push_impl!(String);
+luastr_push_impl!(Vec<u8>);
+
+/// `*mut T` lua wrapper type.
+/// Like `*mut T`, `LightUserdata<T>` is invariant over `T`
+#[repr(transparent)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct LightUserdata<T: ?Sized> {
+    ptr: *mut T,
+}
+
+impl<T> LightUserdata<T> {
+    /// Creates a new `LightUserdata` that is `null`.
+    #[inline]
+    pub const fn null() -> LightUserdata<T> {
+        LightUserdata {
+            ptr: ptr::null_mut(),
+        }
+    }
+}
+
+impl<T: ?Sized> LightUserdata<T> {
+    /// Creates a new `LightUserdata`.
+    #[inline]
+    pub const fn new(ptr: *mut T) -> LightUserdata<T> {
+        LightUserdata { ptr }
+    }
+
+    /// Returns true if the pointer is null.
+    ///
+    /// Note that unsized types have many possible null pointers,
+    /// as only the raw data pointer is considered, not their length, vtable, etc.
+    /// Therefore, two pointers that are null may still not compare equal to each other.
+    #[inline]
+    pub fn is_null(&self) -> bool {
+        self.ptr.is_null()
+    }
+
+    /// Acquires the underlying `*mut` pointer.
+    #[inline]
+    pub const fn as_ptr(&self) -> *mut T {
+        self.ptr
+    }
+
+    /// Dereferences the content.
+    ///
+    /// The resulting lifetime is bound to self so this behaves "as if"
+    /// it were actually an instance of T that is getting borrowed. If a longer
+    /// (unbound) lifetime is needed, use `&*my_ptr.as_ptr()`.
+    ///
+    /// # Safety
+    /// When calling this method, you have to ensure that if the pointer is
+    /// non-NULL, then it is properly aligned, dereferencable (for the whole
+    /// size of `T`) and points to an initialized instance of `T`. This applies
+    /// even if the result of this method is unused!
+    /// (The part about being initialized is not yet fully decided, but until
+    /// it is the only safe approach is to ensure that they are indeed initialized.)
+    #[inline]
+    #[allow(clippy::should_implement_trait)]
+    pub unsafe fn as_ref(&self) -> &T {
+        &*self.as_ptr()
+    }
+
+    /// Mutably dereferences the content.
+    ///
+    /// The resulting lifetime is bound to self so this behaves "as if"
+    /// it were actually an instance of T that is getting borrowed. If a longer
+    /// (unbound) lifetime is needed, use `&mut *my_ptr.as_ptr()`.
+    ///
+    /// # Safety
+    /// When calling this method, you have to ensure that if the pointer is
+    /// non-NULL, then it is properly aligned, dereferencable (for the whole
+    /// size of `T`) and points to an initialized instance of `T`. This applies
+    /// even if the result of this method is unused!
+    /// (The part about being initialized is not yet fully decided, but until
+    /// it is the only safe approach is to ensure that they are indeed initialized.)
+    #[inline]
+    #[allow(clippy::should_implement_trait)]
+    pub unsafe fn as_mut(&mut self) -> &mut T {
+        &mut *self.as_ptr()
+    }
+
+    /// Converts this `LuaUserData` to a [`NonNull`]
+    ///
+    /// [`NonNull`]: std::ptr::NonNull
+    #[inline]
+    pub fn into_non_null(self) -> Option<NonNull<T>> {
+        NonNull::new(self.as_ptr())
+    }
+    /// Converts this `LuaUserData` to a [`NonNull`]
+    ///
+    /// # Safety
+    /// The underlying pointer must be non-null.
+    ///
+    /// [`NonNull`]: std::ptr::NonNull
+    #[inline]
+    pub unsafe fn into_non_null_unchecked(self) -> NonNull<T> {
+        NonNull::new_unchecked(self.as_ptr())
+    }
+
+    #[inline]
+    pub const fn cast<U>(self) -> LightUserdata<U> {
+        LightUserdata {
+            ptr: self.as_ptr() as *mut U,
+        }
+    }
+}
+
+impl<T: ?Sized> Pointer for LightUserdata<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.as_ptr().fmt(f)
+    }
+}
+
+#[cfg(feature = "std")]
+impl<T: RefUnwindSafe + ?Sized> UnwindSafe for LightUserdata<T> {}
+
+impl<T: ?Sized> From<NonNull<T>> for LightUserdata<T> {
+    #[inline]
+    fn from(ptr: NonNull<T>) -> LightUserdata<T> {
+        LightUserdata::new(ptr.as_ptr())
+    }
+}
+
 mod private {
     use super::*;
     pub trait Sealed {}
 
     impl Sealed for LuaNumber {}
+    impl Sealed for LuaNil {}
+    impl Sealed for LuaStr {}
 }
