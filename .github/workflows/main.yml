@@ -48,7 +48,7 @@ jobs:
       - name: Test Pollua
         run: >
           cargo test --all -vv
-          --no-default-features --features "embedded-lua"
+          --no-default-features
           -- ${{ matrix.test_flags }}
 
   system-lua-test:

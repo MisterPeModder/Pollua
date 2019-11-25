@@ -71,7 +71,7 @@ fn emit_lua_version(config: &mut LuaConfig) {
     let (major, minor, patch) = match version_str {
         Some(v) => {
             let version = parse_lua_version(&v);
-            #[cfg(feature = "embedded-lua")]
+            #[cfg(feature = "system-lua")]
             {
                 println!(
                     "cargo:warning=Tried to override LUA_VERSION of embedded Lua from {}.{}.{} to {}.{}.{}",
@@ -84,7 +84,7 @@ fn emit_lua_version(config: &mut LuaConfig) {
                 );
                 EMBEDDED_VERSION
             }
-            #[cfg(not(feature = "embedded-lua"))]
+            #[cfg(not(feature = "system-lua"))]
             {
                 println!("Lua version: {}.{}.{}", version.0, version.1, version.2);
                 version
@@ -155,14 +155,14 @@ fn parse_lua_version(version: &str) -> (u32, u32, u32) {
     release
 }
 
-#[cfg(feature = "embedded-lua")]
+#[cfg(not(feature = "system-lua"))]
 pub struct LuaConfig<'a> {
     build: &'a mut cc::Build,
     prefix: Option<String>,
     version: Option<String>,
 }
 
-#[cfg(not(feature = "embedded-lua"))]
+#[cfg(feature = "system-lua")]
 pub struct LuaConfig<'a> {
     prefix: Option<String>,
     version: Option<String>,
@@ -170,7 +170,7 @@ pub struct LuaConfig<'a> {
 }
 
 impl LuaConfig<'_> {
-    #[cfg(feature = "embedded-lua")]
+    #[cfg(not(feature = "system-lua"))]
     pub fn new(build: &mut cc::Build) -> LuaConfig {
         LuaConfig {
             prefix: None,
@@ -178,8 +178,7 @@ impl LuaConfig<'_> {
             version: None,
         }
     }
-
-    #[cfg(not(feature = "embedded-lua"))]
+    #[cfg(feature = "system-lua")]
     pub fn new() -> LuaConfig<'static> {
         LuaConfig {
             prefix: None,
@@ -219,14 +218,14 @@ impl LuaConfig<'_> {
                 println!("lua build define: {}", &key);
                 println!("cargo:rustc-cfg={}", &key);
 
-                #[cfg(feature = "embedded-lua")]
+                #[cfg(not(feature = "system-lua"))]
                 self.build.define(key, None);
             }
             Some(v) => {
                 println!("Lua build define: {}={}", &key, v);
                 println!("cargo:rustc-cfg={}=\"{}\"", &key, v);
 
-                #[cfg(feature = "embedded-lua")]
+                #[cfg(not(feature = "system-lua"))]
                 self.build.define(key, value);
             }
         }

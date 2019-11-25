@@ -25,12 +25,10 @@ lua-sys = "^0.2.0"
 - **std**: Uses stdlib.
 - **va-list**: Defines bindings for functions that have `va-list` in their arguments,
     a dependency on the [va_list](https://crates.io/crates/va_list) crate.
-- **embedded-lua**: Links againsts the embedded Lua library.
-- **system-lua**: Attempts to link against the system Lua library.
-    conflicts with `embedded-lua`
+- **system-lua**: Attempts to link against the system Lua library instead of using the      embedded lua.
 - **lua-compat**: Enables compatibilty for Lua versions 5.1 and 5.2.
 
-Features `std`, `embedded-lua` and `va-list` are enabled by default.
+Features `std` and `va-list` are enabled by default.
 
 When feature `system-lua` is enabled, lua-sys will search for the Lua library using [pkg-config](https://github.com/rust-lang/pkg-config-rs) on Unix and [vcpkg](https://github.com/mcgoo/vcpkg-rs) on Windows.
 

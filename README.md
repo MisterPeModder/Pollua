@@ -23,12 +23,10 @@ cargo build
 
 ### Cargo features:
 - **std**: Uses stdlib.
-- **embedded-lua**: Links againsts the embedded Lua library.
-- **system-lua**: Attempts to link against the system Lua library.
-    conflicts with `embedded-lua`
+- **system-lua**: Attempts to link against the system Lua library instead of the            embedded lua lib.
 - **lua-compat**: Enables compatibilty for Lua versions 5.1 and 5.2.
 
-Features `std` and `embedded-lua` are enabled by default.
+Feature `std` is enabled by default.
 
 ## License
 
