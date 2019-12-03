@@ -1,11 +1,11 @@
 //! High level bindings to Lua 5.3
 
+#![cfg_attr(rust_nightly, feature(non_exhaustive))]
+
 extern crate libc;
 pub extern crate lua_sys as sys;
 
-use std::ptr;
-use std::error;
-use std::fmt;
+use std::{error, fmt, ptr};
 
 /// Lua thread API.
 pub mod thread;
@@ -39,6 +39,7 @@ pub struct Error {
 ///
 /// [`Error`]: struct.Error.html
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[cfg_attr(rust_nightly, non_exhaustive)]
 pub enum ErrorKind {
     Runtime,
     Syntax,
@@ -46,6 +47,9 @@ pub enum ErrorKind {
     MessageHandler,
     GarbageCollection,
     Io,
+    #[doc(hidden)]
+    #[cfg(not(rust_nightly))]
+    _NonExhaustive,
 }
 
 impl Error {
@@ -69,6 +73,7 @@ impl Error {
 
 impl error::Error for Error {
     fn description(&self) -> &str {
+        #[allow(unreachable_patterns)]
         match self.kind {
             ErrorKind::Runtime => "runtime error",
             ErrorKind::Syntax => "syntax error",
@@ -76,9 +81,9 @@ impl error::Error for Error {
             ErrorKind::MessageHandler => "error while running the message handler",
             ErrorKind::GarbageCollection => "error while running a __gc metamethod",
             ErrorKind::Io => "IO error",
+            _ => "unknown error",
         }
     }
-
     fn cause(&self) -> Option<&dyn error::Error> {
         None
     }
@@ -86,14 +91,7 @@ impl error::Error for Error {
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(match self.kind {
-            ErrorKind::Runtime => "runtime error",
-            ErrorKind::Syntax => "syntax error",
-            ErrorKind::OutOfMemory => "out of memory",
-            ErrorKind::MessageHandler => "error while running the message handler",
-            ErrorKind::GarbageCollection => "error while running a __gc metamethod",
-            ErrorKind::Io => "IO error",
-        })?;
+        f.write_str(error::Error::description(self))?;
         match &self.msg {
             Some(msg) => write!(f, ": {}", msg),
             None => Ok(()),

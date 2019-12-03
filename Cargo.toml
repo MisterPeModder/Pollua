@@ -8,6 +8,7 @@ edition = "2018"
 license = "MIT OR Apache-2.0"
 keywords = ["lua"]
 categories = ["api-bindings", "development-tools::ffi"]
+build = "build.rs"
 
 [dependencies]
 libc = "^0.2.65"
@@ -17,6 +18,9 @@ path = "lua-sys"
 version = "^0.2.0"
 default-features = false
 features = ["va-list", "std"]
+
+[build-dependencies]
+rustc_version = "^0.2.3"
 
 [features]
 default = []
