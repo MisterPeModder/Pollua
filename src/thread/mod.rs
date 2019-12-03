@@ -2,9 +2,10 @@ use crate::{util, Error, ErrorKind, LuaResult};
 
 use std::{
     alloc::{self, Layout},
-    fmt,
+    any::Any,
+    error, fmt,
     marker::PhantomData,
-    mem::{self, ManuallyDrop},
+    mem::ManuallyDrop,
     ops::{Deref, DerefMut},
     ptr::{self, NonNull},
     slice,
@@ -14,6 +15,41 @@ mod call;
 
 pub use call::*;
 
+#[derive(Debug)]
+pub enum ThreadError {
+    Panic(Box<dyn Any + Send + 'static>),
+    Lua(Error),
+}
+
+impl error::Error for ThreadError {
+    fn description(&self) -> &str {
+        match self {
+            ThreadError::Panic(_) => "panicked while running thread",
+            ThreadError::Lua(_) => "lua error",
+        }
+    }
+
+    fn cause(&self) -> Option<&dyn error::Error> {
+        None
+    }
+}
+
+impl fmt::Display for ThreadError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}: ", error::Error::description(self))?;
+        match self {
+            ThreadError::Panic(panic) => fmt::Debug::fmt(panic, f),
+            ThreadError::Lua(error) => fmt::Display::fmt(error, f),
+        }
+    }
+}
+
+impl From<Error> for ThreadError {
+    fn from(error: Error) -> ThreadError {
+        ThreadError::Lua(error)
+    }
+}
+
 /// Lua thread (state) wrapper.
 #[derive(Debug)]
 pub struct Thread {
@@ -21,36 +57,68 @@ pub struct Thread {
 }
 
 impl Thread {
-    /// Creates a new thread running in a new, independent state.
-    /// Can return an out of memory error if insufficient memory
-    /// or a runtime error if there is a version mismatch.
+    /// Spawns a new Lua thread and runs `f` with the new thread as a parameter.
     ///
     /// # Examples
     /// ```
     /// use pollua::thread::Thread;
     ///
-    /// let thread = Thread::new().expect("Failed to create a Lua thread");
+    /// Thread::spawn(move |thread| {
+    ///     println!("Lua version: {}", thread.version());
+    /// }).unwrap()
     /// ```
-    #[inline]
-    pub fn new() -> LuaResult<Thread> {
-        unsafe { Thread::new_from::<()>(None, None, ptr::null_mut()) }
+    pub fn spawn<F, T>(f: F) -> Result<T, ThreadError>
+    where
+        F: FnOnce(&mut Thread) -> T,
+    {
+        // Safe because allocator is set to `None`.
+        unsafe { Thread::spawn_with_allocator(f, None, ptr::null_mut::<()>()) }
     }
 
-    /// Creates a `Thread` from an allocator function and a panic handler.
-    /// If `allocator` or `panic_handler` is set to `None`,
-    /// `Thread` will use a default allocator or panic handler respectively.
+    /// A variant of [`Thread::spawn`] that takes an optional allocator function.alloc
+    ///
+    /// # Safety
+    /// If present, the allocator function must behave exactly as defined in [`the Lua manual`],
+    /// behavior is undefined if the function pointer is invalid, returns invalid allocations,
+    /// or frees memory incorrectly.
+    ///
+    /// [`Thread::spawn`]: struct.Thread.html#method.spawn
+    /// [`the Lua manual`]: https://www.lua.org/manual/5.3/manual.html#lua_Alloc
+    pub unsafe fn spawn_with_allocator<F, T, U>(
+        f: F,
+        allocator: sys::lua_Alloc,
+        userdata: *mut U,
+    ) -> Result<T, ThreadError>
+    where
+        F: FnOnce(&mut Thread) -> T,
+    {
+        Thread::new(allocator, userdata as *mut libc::c_void)
+            .map(|mut t| f(&mut t))
+            .map_err(ThreadError::from)
+    }
+
+    /// Creates a `Thread` from an allocator function.
+    /// If `allocator` is set to `None`, the  default allocator will be used.
     /// `userdata` is a (nullable) raw pointer passed to the allocator function,
     /// if `allocator` is `None` then this parameter is ignored.
     ///
     /// # Safety
-    /// Behavior is undefined if `allocator` or `panic_handler` are invalid.
-    #[inline(always)]
-    pub unsafe fn new_from<T>(
-        allocator: sys::lua_Alloc,
-        panic_handler: sys::lua_CFunction,
-        userdata: *mut T,
-    ) -> LuaResult<Thread> {
-        Thread::new_from_impl(allocator, panic_handler, userdata as *mut _)
+    /// If present, the allocator function must behave exactly as defined in [`the Lua manual`],
+    /// behavior is undefined if the function pointer is invalid, returns invalid allocations,
+    /// or frees memory incorrectly.
+    ///
+    /// [`the Lua manual`]: https://www.lua.org/manual/5.3/manual.html#lua_Alloc
+    unsafe fn new(allocator: sys::lua_Alloc, userdata: *mut libc::c_void) -> LuaResult<Thread> {
+        let mut thread = Thread {
+            raw: NonNull::new(match allocator {
+                Some(_) => sys::lua_newstate(allocator, userdata),
+                None => sys::lua_newstate(Some(alloc_default), ptr::null_mut()),
+            })
+            .ok_or_else(|| Error::new(ErrorKind::OutOfMemory, None))?,
+        };
+        sys::lua_atpanic(thread.raw.as_ptr(), Some(at_panic));
+        thread.check_version()?;
+        Ok(thread)
     }
 
     /// Checks whether the core running the call, the core that created the Lua state,
@@ -113,8 +181,9 @@ impl Thread {
     /// ```
     /// use pollua::thread::Thread;
     ///
-    /// let thread = Thread::new().expect("Failed to create Lua thread");
-    /// let thread_version = thread.version();
+    /// let thread_version = Thread::spawn(move |thread| {
+    ///     thread.version()
+    /// }).expect("Failed to create Lua thread");
     ///
     /// assert_eq!(thread_version, pollua::lua_version());
     /// ```
@@ -127,38 +196,9 @@ impl Thread {
     ///
     /// It is up to the caller to ensure that the object is still alive when accessing it through
     /// the pointer.
-    ///
-    /// # Examples
-    /// ```
-    /// use pollua::thread::Thread;
-    ///
-    /// let thread = Thread::new();
-    /// ```
-    ///
     #[inline]
     pub fn as_raw(&mut self) -> NonNull<sys::lua_State> {
         self.raw
-    }
-
-    /// Consumes the `Thread`, returning the wrapped raw pointer.
-    ///
-    /// # Examples
-    /// Converting the raw pointer back into a `Thread` with [`Thread::from_raw`]:
-    /// ```
-    /// use pollua::thread::Thread;
-    ///
-    /// let thread = Thread::new().expect("Failed to create Lua thread");
-    /// let ptr = thread.into_raw();
-    ///
-    /// let x = unsafe { Thread::from_raw(ptr) };
-    /// ```
-    ///
-    /// [`Thread::from_raw`]: struct.Thread.html#method.from_raw
-    #[inline]
-    pub fn into_raw(self) -> NonNull<sys::lua_State> {
-        let raw = self.raw;
-        mem::forget(self);
-        raw
     }
 
     /// Constructs a `Thread` from a raw pointer.
@@ -229,26 +269,6 @@ impl Thread {
 
 // Method impls
 impl Thread {
-    unsafe fn new_from_impl(
-        allocator: sys::lua_Alloc,
-        panic_handler: sys::lua_CFunction,
-        userdata: *mut libc::c_void,
-    ) -> LuaResult<Thread> {
-        let mut thread = Thread {
-            raw: NonNull::new(match allocator {
-                Some(_) => sys::lua_newstate(allocator, userdata),
-                None => sys::lua_newstate(Some(alloc_default), ptr::null_mut()),
-            })
-            .ok_or_else(|| Error::new(ErrorKind::OutOfMemory, None))?,
-        };
-        sys::lua_atpanic(
-            thread.raw.as_ptr(),
-            panic_handler.or(Some(at_panic_default)),
-        );
-        thread.check_version()?;
-        Ok(thread)
-    }
-
     fn caller_load_impl<'a>(
         &'a mut self,
         buffer: &[u8],
@@ -364,7 +384,7 @@ impl<'a> DerefMut for ThreadRef<'a> {
 }
 
 /// Default panic handler function.
-unsafe extern "C" fn at_panic_default(thread: *mut sys::lua_State) -> libc::c_int {
+unsafe extern "C" fn at_panic(thread: *mut sys::lua_State) -> libc::c_int {
     match Thread::ref_from_raw(NonNull::new_unchecked(thread)).get_error(sys::LUA_ERRRUN) {
         Ok(()) => 0,
         Err(Error { msg: None, .. }) => panic!("Lua panic: <no error message>"),
@@ -408,25 +428,27 @@ mod test {
 
     #[test]
     fn test_thread_push_global() {
-        let mut thread = Thread::new().unwrap();
-        let mut top;
-        top = stack_top(&mut thread);
-        thread.push_global("undef_var");
-        assert_eq!(type_at(&mut thread, -1), sys::LUA_TNIL);
-        assert_eq!(stack_top(&mut thread), top + 1);
+        Thread::spawn(move |thread| {
+            let mut top;
+            top = stack_top(thread);
+            thread.push_global("undef_var");
+            assert_eq!(type_at(thread, -1), sys::LUA_TNIL);
+            assert_eq!(stack_top(thread), top + 1);
 
-        unsafe {
-            sys::lua_pushinteger(thread.as_raw().as_ptr(), 42);
-            sys::lua_setglobal(thread.as_raw().as_ptr(), b"num_var\0".as_ptr() as *const _);
-        }
-        top = stack_top(&mut thread);
-        thread.push_global("num_var");
-        assert_eq!(type_at(&mut thread, -1), sys::LUA_TNUMBER);
-        assert!(unsafe { sys::lua_isinteger(thread.as_raw().as_ptr(), -1) } != 0);
-        assert_eq!(
-            unsafe { sys::lua_tointeger(thread.as_raw().as_ptr(), -1) },
-            42
-        );
-        assert_eq!(stack_top(&mut thread), top + 1);
+            unsafe {
+                sys::lua_pushinteger(thread.as_raw().as_ptr(), 42);
+                sys::lua_setglobal(thread.as_raw().as_ptr(), b"num_var\0".as_ptr() as *const _);
+            }
+            top = stack_top(thread);
+            thread.push_global("num_var");
+            assert_eq!(type_at(thread, -1), sys::LUA_TNUMBER);
+            assert!(unsafe { sys::lua_isinteger(thread.as_raw().as_ptr(), -1) } != 0);
+            assert_eq!(
+                unsafe { sys::lua_tointeger(thread.as_raw().as_ptr(), -1) },
+                42
+            );
+            assert_eq!(stack_top(thread), top + 1);
+        })
+        .unwrap()
     }
 }

@@ -317,58 +317,60 @@ mod test {
             3
         }
 
-        let mut thread = Thread::new().unwrap();
-        let top = stack_top(&mut thread);
-        unsafe {
-            sys::lua_register(
-                thread.as_raw().as_ptr(),
-                b"test_call\0".as_ptr() as *const _,
-                Some(test_call),
-            );
-        }
+        Thread::spawn(move |thread| {
+            let top = stack_top(thread);
+            unsafe {
+                sys::lua_register(
+                    thread.as_raw().as_ptr(),
+                    b"test_call\0".as_ptr() as *const _,
+                    Some(test_call),
+                );
+            }
 
-        // Dropping the caller without calling should pop the stack.
-        mem::drop(thread.caller_global("test_call").unwrap());
-        assert_eq!(stack_top(&mut thread), top);
+            // Dropping the caller without calling should pop the stack.
+            mem::drop(thread.caller_global("test_call").unwrap());
+            assert_eq!(stack_top(thread), top);
 
-        unsafe {
-            let return_values = thread
-                .caller_global("test_call")
-                .unwrap()
-                .calln_unprotected(0);
-            assert_eq!(return_values.get(0), None);
-        }
-        assert_eq!(stack_top(&mut thread), top);
+            unsafe {
+                let return_values = thread
+                    .caller_global("test_call")
+                    .unwrap()
+                    .calln_unprotected(0);
+                assert_eq!(return_values.get(0), None);
+            }
+            assert_eq!(stack_top(thread), top);
 
-        {
-            let return_values = thread.caller_global("test_call").unwrap().call().unwrap();
-            assert_eq!(return_values[0], ValueType::Boolean);
-            assert_eq!(return_values[1], ValueType::Number);
-            assert_eq!(return_values[2], ValueType::String);
-            assert_eq!(return_values.get(3), None);
-        }
-        assert_eq!(stack_top(&mut thread), top);
+            {
+                let return_values = thread.caller_global("test_call").unwrap().call().unwrap();
+                assert_eq!(return_values[0], ValueType::Boolean);
+                assert_eq!(return_values[1], ValueType::Number);
+                assert_eq!(return_values[2], ValueType::String);
+                assert_eq!(return_values.get(3), None);
+            }
+            assert_eq!(stack_top(thread), top);
 
-        {
-            let return_values = thread.caller_global("test_call").unwrap().calln(2).unwrap();
-            assert_eq!(return_values.get(0), Some(ValueType::Boolean));
-            assert_eq!(return_values.get(1), Some(ValueType::Number));
-            assert_eq!(return_values.get(2), None);
-        }
-        assert_eq!(stack_top(&mut thread), top);
+            {
+                let return_values = thread.caller_global("test_call").unwrap().calln(2).unwrap();
+                assert_eq!(return_values.get(0), Some(ValueType::Boolean));
+                assert_eq!(return_values.get(1), Some(ValueType::Number));
+                assert_eq!(return_values.get(2), None);
+            }
+            assert_eq!(stack_top(thread), top);
 
-        unsafe {
-            let return_values = thread
-                .caller_global("test_call")
-                .unwrap()
-                .calln_unprotected(4);
-            assert_eq!(return_values[0], ValueType::Boolean);
-            assert_eq!(return_values[1], ValueType::Number);
-            assert_eq!(return_values.get(2), Some(ValueType::String));
-            assert_eq!(return_values.get(3), Some(ValueType::Nil));
-            assert_eq!(return_values.get(4), None);
-        }
-        assert_eq!(stack_top(&mut thread), top);
+            unsafe {
+                let return_values = thread
+                    .caller_global("test_call")
+                    .unwrap()
+                    .calln_unprotected(4);
+                assert_eq!(return_values[0], ValueType::Boolean);
+                assert_eq!(return_values[1], ValueType::Number);
+                assert_eq!(return_values.get(2), Some(ValueType::String));
+                assert_eq!(return_values.get(3), Some(ValueType::Nil));
+                assert_eq!(return_values.get(4), None);
+            }
+            assert_eq!(stack_top(thread), top);
+        })
+        .unwrap()
     }
 
     #[test]
@@ -384,42 +386,44 @@ mod test {
             5
         }
 
-        let mut thread = Thread::new().unwrap();
-        let top = stack_top(&mut thread);
-        unsafe {
-            sys::lua_register(
-                thread.as_raw().as_ptr(),
-                b"test_call\0".as_ptr() as *const _,
-                Some(test_call),
-            );
-        }
+        Thread::spawn(move |thread| {
+            let top = stack_top(thread);
+            unsafe {
+                sys::lua_register(
+                    thread.as_raw().as_ptr(),
+                    b"test_call\0".as_ptr() as *const _,
+                    Some(test_call),
+                );
+            }
 
-        unsafe {
-            let values = thread
-                .caller_global("test_call")
-                .unwrap()
-                .calln_unprotected(0);
-            let mut iter = values.iter();
-            assert_eq!(iter.len(), 0);
-            assert_eq!(iter.next(), None);
-            assert_eq!(iter.next_back(), None);
-        }
-        assert_eq!(stack_top(&mut thread), top);
+            unsafe {
+                let values = thread
+                    .caller_global("test_call")
+                    .unwrap()
+                    .calln_unprotected(0);
+                let mut iter = values.iter();
+                assert_eq!(iter.len(), 0);
+                assert_eq!(iter.next(), None);
+                assert_eq!(iter.next_back(), None);
+            }
+            assert_eq!(stack_top(thread), top);
 
-        {
-            let values = thread.caller_global("test_call").unwrap().call().unwrap();
-            let mut iter = values.iter();
-            assert_eq!(iter.len(), 5);
-            assert_eq!(iter.next(), Some(ValueType::Function));
-            assert_eq!(iter.next(), Some(ValueType::Boolean));
-            assert_eq!(iter.next_back(), Some(ValueType::String));
-            assert_eq!(iter.next_back(), Some(ValueType::Number));
-            assert_eq!(iter.len(), 1);
-            assert_eq!(iter.next(), Some(ValueType::LightUserdata));
-            assert_eq!(iter.next(), None);
-            assert_eq!(iter.next_back(), None);
-        }
-        assert_eq!(stack_top(&mut thread), top);
+            {
+                let values = thread.caller_global("test_call").unwrap().call().unwrap();
+                let mut iter = values.iter();
+                assert_eq!(iter.len(), 5);
+                assert_eq!(iter.next(), Some(ValueType::Function));
+                assert_eq!(iter.next(), Some(ValueType::Boolean));
+                assert_eq!(iter.next_back(), Some(ValueType::String));
+                assert_eq!(iter.next_back(), Some(ValueType::Number));
+                assert_eq!(iter.len(), 1);
+                assert_eq!(iter.next(), Some(ValueType::LightUserdata));
+                assert_eq!(iter.next(), None);
+                assert_eq!(iter.next_back(), None);
+            }
+            assert_eq!(stack_top(thread), top);
+        })
+        .unwrap()
     }
 
     #[test]
@@ -428,21 +432,23 @@ mod test {
             sys::lua_error(l)
         }
 
-        let mut thread = Thread::new().unwrap();
-        unsafe {
-            sys::lua_register(
-                thread.as_raw().as_ptr(),
-                b"test_call\0".as_ptr() as *const _,
-                Some(test_call),
-            );
-        }
+        Thread::spawn(move |thread| {
+            unsafe {
+                sys::lua_register(
+                    thread.as_raw().as_ptr(),
+                    b"test_call\0".as_ptr() as *const _,
+                    Some(test_call),
+                );
+            }
 
-        let err = thread
-            .caller_global("test_call")
-            .unwrap()
-            .call()
-            .unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::Runtime);
+            let err = thread
+                .caller_global("test_call")
+                .unwrap()
+                .call()
+                .unwrap_err();
+            assert_eq!(err.kind(), ErrorKind::Runtime);
+        })
+        .unwrap()
     }
 
     #[test]
@@ -460,62 +466,64 @@ mod test {
             1
         }
 
-        let mut thread = Thread::new().unwrap();
-        let top = stack_top(&mut thread);
-        unsafe {
-            sys::lua_register(
-                thread.as_raw().as_ptr(),
-                b"test_sum\0".as_ptr() as *const _,
-                Some(test_sum),
-            );
-        }
+        Thread::spawn(move |thread| {
+            let top = stack_top(thread);
+            unsafe {
+                sys::lua_register(
+                    thread.as_raw().as_ptr(),
+                    b"test_sum\0".as_ptr() as *const _,
+                    Some(test_sum),
+                );
+            }
 
-        {
-            let err = thread
-                .caller_global("test_sum")
-                .unwrap()
-                .call()
-                .unwrap_err();
-            assert_eq!(err.kind(), ErrorKind::Runtime);
-        }
-        assert_eq!(stack_top(&mut thread), top);
+            {
+                let err = thread
+                    .caller_global("test_sum")
+                    .unwrap()
+                    .call()
+                    .unwrap_err();
+                assert_eq!(err.kind(), ErrorKind::Runtime);
+            }
+            assert_eq!(stack_top(thread), top);
 
-        {
-            let err = thread
-                .caller_global("test_sum")
-                .unwrap()
-                .arg(42.0)
-                .arg(LuaNil)
-                .call()
-                .unwrap_err();
-            assert_eq!(err.kind(), ErrorKind::Runtime);
-        }
-        assert_eq!(stack_top(&mut thread), top);
+            {
+                let err = thread
+                    .caller_global("test_sum")
+                    .unwrap()
+                    .arg(42.0)
+                    .arg(LuaNil)
+                    .call()
+                    .unwrap_err();
+                assert_eq!(err.kind(), ErrorKind::Runtime);
+            }
+            assert_eq!(stack_top(thread), top);
 
-        {
-            let return_values = thread
-                .caller_global("test_sum")
-                .unwrap()
-                .arg(1.0f64)
-                .arg(2.0f64)
-                .call()
-                .unwrap();
-            assert_eq!(return_values.get(0), Some(ValueType::Number));
-            assert_eq!(return_values.get(1), None);
-        }
-        assert_eq!(stack_top(&mut thread), top);
-        {
-            let return_values = thread
-                .caller_global("test_sum")
-                .unwrap()
-                .arg(-2.0f64)
-                .arg("24")
-                .arg(7.2f64)
-                .call()
-                .unwrap();
-            assert_eq!(return_values.get(0), Some(ValueType::Number));
-            assert_eq!(return_values.get(1), None);
-        }
-        assert_eq!(stack_top(&mut thread), top);
+            {
+                let return_values = thread
+                    .caller_global("test_sum")
+                    .unwrap()
+                    .arg(1.0f64)
+                    .arg(2.0f64)
+                    .call()
+                    .unwrap();
+                assert_eq!(return_values.get(0), Some(ValueType::Number));
+                assert_eq!(return_values.get(1), None);
+            }
+            assert_eq!(stack_top(thread), top);
+            {
+                let return_values = thread
+                    .caller_global("test_sum")
+                    .unwrap()
+                    .arg(-2.0f64)
+                    .arg("24")
+                    .arg(7.2f64)
+                    .call()
+                    .unwrap();
+                assert_eq!(return_values.get(0), Some(ValueType::Number));
+                assert_eq!(return_values.get(1), None);
+            }
+            assert_eq!(stack_top(thread), top);
+        })
+        .unwrap()
     }
 }
