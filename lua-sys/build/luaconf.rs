@@ -71,7 +71,7 @@ fn emit_lua_version(config: &mut LuaConfig) {
     let (major, minor, patch) = match version_str {
         Some(v) => {
             let version = parse_lua_version(&v);
-            #[cfg(feature = "system-lua")]
+            #[cfg(not(feature = "system-lua"))]
             {
                 println!(
                     "cargo:warning=Tried to override LUA_VERSION of embedded Lua from {}.{}.{} to {}.{}.{}",
@@ -84,7 +84,7 @@ fn emit_lua_version(config: &mut LuaConfig) {
                 );
                 EMBEDDED_VERSION
             }
-            #[cfg(not(feature = "system-lua"))]
+            #[cfg(feature = "system-lua")]
             {
                 println!("Lua version: {}.{}.{}", version.0, version.1, version.2);
                 version
