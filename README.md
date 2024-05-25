@@ -2,6 +2,8 @@
 Pollua
 =========================
 
+**⚠️ This library is no longer maintained, consider using [mlua-sys](https://crates.io/crates/mlua-sys) instead ⚠️**
+
 (WIP) rust bindings to Lua 5.3
 
 ## Building
